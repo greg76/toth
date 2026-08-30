@@ -10,13 +10,13 @@ from pandas.core.frame import DataFrame
 
 DB_PATH = "brew_stats.db"
 conn = sqlite3.connect(DB_PATH)
-
-CASK_FILE = "dumps/20260823cask.zst"
-MIN_REQUESTS = 250
-
-def parse_num(formatted_string: str) -> int:
-    return int(formatted_string.replace(",", ""))
-
+QUERY = """
+SELECT counts.date, names.name, counts.count
+FROM counts
+JOIN names ON names.name_id = counts.name_id
+WHERE names.name {}
+ORDER BY counts.date
+"""
 
 def brew_search(desc: str) -> list[str | None]:
     command = ["brew", "search", "--desc", desc.strip()]
@@ -36,7 +36,6 @@ def brew_search(desc: str) -> list[str | None]:
     return [
         line.partition(":")[0] for line in result.stdout.splitlines() if ":" in line
     ]
-
 
 def top_chart(
     casks: list[tuple[str, int]],
@@ -78,72 +77,23 @@ def top_trend(df: DataFrame, title: str | None = None, limit: int | None = 5) ->
     plt.title(f"Top {limit} {title if title else ''}")
     plt.show()
 
-
-# %% font data over time
-
-df = pd.read_sql_query(
-    """
-    SELECT counts.date, names.name, counts.count
-    FROM counts
-    JOIN names ON names.name_id = counts.name_id
-    WHERE names.name LIKE 'font-%'
-    ORDER BY counts.date
-    """,
-    conn,
-)
-top_trend(df, "fonts")
-
 # %% terminal emulators over time
 
-terminal_emulator_list = ", ".join(
-    f"'{name}'" for name in brew_search("terminal emulator")
-)
+match_list = ", ".join(f"'{name}'" for name in brew_search("terminal emulator"))
 
-df = pd.read_sql_query(
-    f"""
-    SELECT counts.date, names.name, counts.count
-    FROM counts
-    JOIN names ON names.name_id = counts.name_id
-    WHERE names.name IN ({terminal_emulator_list})
-    ORDER BY counts.date
-    """,
-    conn,
-)
+df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
 top_trend(df, "terminal emulators")
 
 # %% code editors over time
 
-editor_list = ", ".join(
+match_list = ", ".join(
     f"'{name}'"
     for name in brew_search("/.*edit.*code.*/") + brew_search("/.*code.*edit.*/")
 )
 
-df = pd.read_sql_query(
-    f"""
-    SELECT counts.date, names.name, counts.count
-    FROM counts
-    JOIN names ON names.name_id = counts.name_id
-    WHERE names.name IN ({editor_list})
-    ORDER BY counts.date
-    """,
-    conn,
-)
+df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
 top_trend(df, "code editors")
-# %% browsers over time
 
-editor_list = ", ".join(f"'{name}'" for name in brew_search("web browser"))
-
-df = pd.read_sql_query(
-    f"""
-    SELECT counts.date, names.name, counts.count
-    FROM counts
-    JOIN names ON names.name_id = counts.name_id
-    WHERE names.name IN ({editor_list})
-    ORDER BY counts.date
-    """,
-    conn,
-)
-top_trend(df, "web browsers")
 # %% coding agents over time
 
 agents = brew_search(
@@ -156,34 +106,23 @@ agents += [
     "anomalyco/tap/opencode",
 ]
 
-
 match_list = ", ".join(f"'{name}'" for name in agents)
-
-df = pd.read_sql_query(
-    f"""
-    SELECT counts.date, names.name, counts.count
-    FROM counts
-    JOIN names ON names.name_id = counts.name_id
-    WHERE names.name IN ({match_list})
-    ORDER BY counts.date
-    """,
-    conn,
-)
+df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
 top_trend(df, "coding agents")
+# %% font data over time
+
+df = pd.read_sql_query(QUERY.format("LIKE 'font-%'"), conn)
+top_trend(df, "fonts")
+
+# %% browsers over time
+
+match_list = ", ".join(f"'{name}'" for name in brew_search("web browser"))
+df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
+top_trend(df, "web browsers")
 
 
 # %% media players
 
 match_list = ", ".join(f"'{name}'" for name in brew_search("media player"))
-
-df = pd.read_sql_query(
-    f"""
-    SELECT counts.date, names.name, counts.count
-    FROM counts
-    JOIN names ON names.name_id = counts.name_id
-    WHERE names.name IN ({match_list})
-    ORDER BY counts.date
-    """,
-    conn,
-)
+df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
 top_trend(df, "media players")
