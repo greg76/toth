@@ -1,16 +1,18 @@
 # %% imports, constants, helper functions
 
-import json
+import sqlite3
 import subprocess
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-from compression import zstd
+from pandas.core.frame import DataFrame
+
+DB_PATH = "brew_stats.db"
+conn = sqlite3.connect(DB_PATH)
 
 CASK_FILE = "dumps/20260823cask.zst"
 MIN_REQUESTS = 250
-
 
 def parse_num(formatted_string: str) -> int:
     return int(formatted_string.replace(",", ""))
@@ -55,55 +57,94 @@ def top_chart(
     plt.title(f"Top {limit} {title if title else ''}")
     plt.show()
 
+def top_trend(df: DataFrame, title: str | None = None, limit: int | None = 5) -> None:
+    df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
+    latest_date = df["date"].max()
+    top = df[df["date"] == latest_date].nlargest(limit, "count")["name"]
+    plot_df = df[df["name"].isin(top)]
 
-# %% load data
-with zstd.open(CASK_FILE) as f:
-    raw = json.load(f)
+    ax = sns.lineplot(
+        data=plot_df,
+        x="date",
+        y="count",
+        hue="name",
+        hue_order=top,
+        style="name",
+        markers=True,
+        dashes=False,
+    )
+    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1))
+    plt.xticks(rotation=90)
+    plt.title(f"Top {limit} {title if title else ''}")
+    plt.show()
 
-    cask_requests = {
-        e["cask"]: count
-        for e in raw["items"]
-        if (count := parse_num(e["count"])) >= MIN_REQUESTS
-    }
 
-    print(f"{len(cask_requests)} casks loaded from {CASK_FILE}")
+# %% font data over time
 
-# %% top fonts
+df = pd.read_sql_query(
+    """
+    SELECT counts.date, names.name, counts.count
+    FROM counts
+    JOIN names ON names.name_id = counts.name_id
+    WHERE names.name LIKE 'font-%'
+    ORDER BY counts.date
+    """,
+    conn,
+)
+top_trend(df, "fonts")
 
-font_casks = [
-    (str(font), count)
-    for font, count in cask_requests.items()
-    if font.startswith("font-")
-]
-top_chart(font_casks, "Fonts")
+# %% terminal emulators over time
 
-# %% top terminal emulators
+terminal_emulator_list = ", ".join(
+    f"'{name}'" for name in brew_search("terminal emulator")
+)
 
-terminal_emulators = brew_search("terminal emulator")
-terminal_casks = [
-    (str(cask), count)
-    for cask, count in cask_requests.items()
-    if cask in terminal_emulators
-]
-top_chart(terminal_casks, "Terminal emulators")
+df = pd.read_sql_query(
+    f"""
+    SELECT counts.date, names.name, counts.count
+    FROM counts
+    JOIN names ON names.name_id = counts.name_id
+    WHERE names.name IN ({terminal_emulator_list})
+    ORDER BY counts.date
+    """,
+    conn,
+)
+top_trend(df, "terminal emulators")
 
-# %% top code editors
+# %% code editors over time
 
-editors = brew_search("/.*edit.*code.*/") + brew_search("/.*code.*edit.*/")
-editor_casks = [
-    (str(cask), count) for cask, count in cask_requests.items() if cask in editors
-]
-top_chart(editor_casks, "Editors")
+editor_list = ", ".join(
+    f"'{name}'"
+    for name in brew_search("/.*edit.*code.*/") + brew_search("/.*code.*edit.*/")
+)
 
-# %% browsers
+df = pd.read_sql_query(
+    f"""
+    SELECT counts.date, names.name, counts.count
+    FROM counts
+    JOIN names ON names.name_id = counts.name_id
+    WHERE names.name IN ({editor_list})
+    ORDER BY counts.date
+    """,
+    conn,
+)
+top_trend(df, "code editors")
+# %% browsers over time
 
-browsers = brew_search("web browser")
-browser_casks = [
-    (str(cask), count) for cask, count in cask_requests.items() if cask in browsers
-]
-top_chart(browser_casks, "Web browsers")
+editor_list = ", ".join(f"'{name}'" for name in brew_search("web browser"))
 
-# %% list of coding agents
+df = pd.read_sql_query(
+    f"""
+    SELECT counts.date, names.name, counts.count
+    FROM counts
+    JOIN names ON names.name_id = counts.name_id
+    WHERE names.name IN ({editor_list})
+    ORDER BY counts.date
+    """,
+    conn,
+)
+top_trend(df, "web browsers")
+# %% coding agents over time
 
 agents = brew_search(
     r"/(?i)^(?!.*menu bar)(?!.*status).*\bcoding\b\s\b(agent|assistant)\b.*/"
@@ -114,20 +155,35 @@ agents += [
     "charmbracelet/tap/crush",
     "anomalyco/tap/opencode",
 ]
-print(agents)
 
-# %% chart of agents
 
-agent_casks: list[tuple[str, int]] = [
-    (str(cask), count) for cask, count in cask_requests.items() if cask in agents
-]
-top_chart(agent_casks, "Coding agents")
+match_list = ", ".join(f"'{name}'" for name in agents)
+
+df = pd.read_sql_query(
+    f"""
+    SELECT counts.date, names.name, counts.count
+    FROM counts
+    JOIN names ON names.name_id = counts.name_id
+    WHERE names.name IN ({match_list})
+    ORDER BY counts.date
+    """,
+    conn,
+)
+top_trend(df, "coding agents")
+
 
 # %% media players
 
-players = brew_search(r"media player")
-player_casks = [
-    (str(cask), count) for cask, count in cask_requests.items() if cask in players
-]
+match_list = ", ".join(f"'{name}'" for name in brew_search("media player"))
 
-top_chart(player_casks, "Media players")
+df = pd.read_sql_query(
+    f"""
+    SELECT counts.date, names.name, counts.count
+    FROM counts
+    JOIN names ON names.name_id = counts.name_id
+    WHERE names.name IN ({match_list})
+    ORDER BY counts.date
+    """,
+    conn,
+)
+top_trend(df, "media players")
