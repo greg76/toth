@@ -109,6 +109,50 @@ agents += [
 match_list = ", ".join(f"'{name}'" for name in agents)
 df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
 top_trend(df, "coding agents")
+# %% python package managers
+pkgs = set(
+    brew_search("/(?i)^(?!.*(?:token|dictation)).*LLM.*/")
+    + brew_search("/(?i)^.*offline ai.*/")
+    + brew_search("/(?i)^(?!.*token).*large language model.*/")
+    + ["mlx"]
+)
+
+match_list = ", ".join(f"'{name}'" for name in pkgs)
+df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
+
+top_trend(df, "LLM runners")
+# %% search tools
+
+pkgs = set(brew_search("/(?i)^(?!.*(?:backend)).*search|find.*/"))
+match_list = ", ".join(f"'{name}'" for name in pkgs)
+df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
+top_trend(df, "search tools")
+
+# %% top python versions
+
+df = pd.read_sql_query(QUERY.format("LIKE 'python@%'"), conn)
+top_trend(df, "python versions")
+# %% python package managers
+pkgs = set(
+    brew_search("python package")
+    + brew_search("python dependency")
+    # + brew_search("python environment")
+    + brew_search("conda")
+    + ["pixi"]
+)
+match_list = ", ".join(f"'{name}'" for name in pkgs)
+df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
+top_trend(df, "python package managers")
+# %% compression tools
+
+pkgs = set(
+    brew_search("/(?i)^(?!.*(?:image)).*compression.*/") + brew_search("archiver")
+)
+match_list = ", ".join(f"'{name}'" for name in pkgs)
+df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
+top_trend(df, "compression packages")
+
+
 # %% font data over time
 
 df = pd.read_sql_query(QUERY.format("LIKE 'font-%'"), conn)
@@ -126,3 +170,4 @@ top_trend(df, "web browsers")
 match_list = ", ".join(f"'{name}'" for name in brew_search("media player"))
 df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
 top_trend(df, "media players")
+
