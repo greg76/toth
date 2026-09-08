@@ -114,3 +114,77 @@ summary_df = pd.concat([valid_clusters, outliers], ignore_index=True)
 
 # Display results nicely
 display(summary_df)
+# %% visualize how close the clusters are to each other
+
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.manifold import MDS
+
+# 1. Compute a centroid embedding per cluster (skip noise, id == -1)
+centroids = {}
+for cluster_id, group in df[df["cluster"] != -1].groupby("cluster"):
+    centroids[cluster_id] = embeddings[group.index].mean(axis=0)
+
+cluster_ids = sorted(centroids)
+
+if len(cluster_ids) < 2:
+    print("Need at least 2 non-noise clusters to compare.")
+else:
+    centroid_matrix = np.vstack([centroids[c] for c in cluster_ids])
+    centroid_distances = cosine_distances(centroid_matrix)
+
+    # Human-readable labels: reuse the TF-IDF keywords from summary_df
+    label_map = dict(zip(summary_df["cluster_id"], summary_df["cluster_description"]))
+    labels = []
+    for cid in cluster_ids:
+        kw = label_map[cid].split("[")[-1].rstrip("]")  # extract keyword part
+        labels.append(f"C{cid}: {kw[:40]}")
+
+    n = len(labels)
+
+    # 2D "map" of the clusters via MDS on the centroid distance matrix
+    mds = MDS(
+        n_components=2,
+        metric="precomputed",
+        init="classical_mds",
+        random_state=42,
+    )
+    coords = mds.fit_transform(centroid_distances)
+
+    short_labels = [f"C{cid}" for cid in cluster_ids]
+
+    cmap = plt.get_cmap("tab20")
+    colors = [cmap(i % cmap.N) for i in range(n)]
+
+    # Scale figure height with the legend length so the scatter plot
+    # gets the same vertical space as the legend
+    fig_height = max(6, 0.25 * n)
+
+    # Two-column layout: scatter on the left, legend in its own (blank)
+    # axes on the right, both spanning the full figure height
+    fig, (ax, lax) = plt.subplots(
+        1,
+        2,
+        figsize=(9, fig_height),
+        gridspec_kw={"width_ratios": [2.2, 1]},
+    )
+
+    ax.scatter(coords[:, 0], coords[:, 1], s=80, color=colors)
+    for i, short in enumerate(short_labels):
+        ax.annotate(
+            short, coords[i], textcoords="offset points", xytext=(6, 4), fontsize=9
+        )
+
+    legend_handles = [
+        plt.Line2D([], [], marker="o", linestyle="", color=colors[i], markersize=8)
+        for i in range(n)
+    ]
+    lax.legend(legend_handles, labels, loc="upper left", fontsize=9, title="Clusters")
+    lax.axis("off")
+
+    ax.set_title("Cluster map (MDS of centroid distances; closer = more similar)")
+    ax.set_xlabel("MDS 1")
+    ax.set_ylabel("MDS 2")
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    plt.show()

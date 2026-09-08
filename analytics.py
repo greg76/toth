@@ -74,8 +74,32 @@ def top_trend(df: DataFrame, title: str | None = None, limit: int | None = 5) ->
     )
     ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1))
     plt.xticks(rotation=90)
-    plt.title(f"Top {limit} {title if title else ''}")
+    plt.title(f"Top {min(limit, df['name'].nunique())} {title if title else ''}")
     plt.show()
+
+def merge_names(
+    df: pd.DataFrame,
+    name_col: str = "name",
+    count_col: str = "count",
+    date_col: str = "date",
+) -> pd.DataFrame:
+    """
+    Merge names containing '@' into their base name and aggregate counts
+    per name per date.
+
+    Args:
+        df: Input DataFrame.
+        name_col: Column containing names (e.g. 'node@22').
+        count_col: Column with values to sum.
+        date_col: Column to group dates by.
+
+    Returns:
+        A new DataFrame with merged names and summed counts.
+    """
+    result = df.copy()
+    result[name_col] = result[name_col].str.split("@").str[0]
+    return result.groupby([name_col, date_col], as_index=False)[count_col].sum()
+
 
 # %% terminal emulators over time
 
@@ -127,6 +151,14 @@ pkgs = set(brew_search("/(?i)^(?!.*(?:backend)).*search|find.*/"))
 match_list = ", ".join(f"'{name}'" for name in pkgs)
 df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
 top_trend(df, "search tools")
+# %% javascript runtimes
+
+pkgs = brew_search("/(?i)(?=.*javascript)(?=.*runtime)/")
+match_list = ", ".join(f"'{name}'" for name in pkgs)
+df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
+
+top_trend(merge_names(df), "javascript runtimes")
+
 
 # %% top python versions
 
