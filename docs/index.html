@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Top of The Hops — Trending Homebrew packages</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      --ink: #171914;
+      --muted: #6d7066;
+      --paper: #f4f1e8;
+      --card: #fbfaf5;
+      --hop: #4f7c45;
+      --hop-dark: #31552e;
+      --hop-light: #dce7d7;
+      --amber: #c48a38;
+      --border: #dedbd0;
+      --white: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family:
+        Inter,
+        ui-sans-serif,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+      line-height: 1.5;
+    }
+
+    /* --------------------------------
+       Layout
+    -------------------------------- */
+
+    .container {
+      width: min(1120px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    /* --------------------------------
+       Header
+    -------------------------------- */
+
+    header {
+      padding: 28px 0 100px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 100px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      font-size: 18px;
+    }
+
+    .hop-mark {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--hop);
+      color: white;
+      font-size: 15px;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--hop);
+      box-shadow: 0 0 0 4px var(--hop-light);
+    }
+
+    .hero {
+      max-width: 850px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+      padding: 6px 10px;
+      background: var(--hop-light);
+      color: var(--hop-dark);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 750;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(52px, 9vw, 100px);
+      line-height: 0.88;
+      letter-spacing: -0.075em;
+      font-weight: 850;
+    }
+
+    h1 span {
+      color: var(--hop);
+    }
+
+    .hero-copy {
+      max-width: 650px;
+      margin: 30px 0 0;
+      color: var(--muted);
+      font-size: clamp(18px, 2.2vw, 22px);
+      letter-spacing: -0.02em;
+    }
+
+    .hero-meta {
+      margin-top: 35px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .pill {
+      padding: 7px 11px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12px;
+      background: rgba(255,255,255,0.35);
+    }
+
+    /* --------------------------------
+       Main
+    -------------------------------- */
+
+    main {
+      padding: 80px 0;
+    }
+
+    .section-heading {
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      gap: 30px;
+      margin-bottom: 25px;
+    }
+
+    .section-heading h2 {
+      margin: 0;
+      font-size: 28px;
+      letter-spacing: -0.04em;
+    }
+
+    .section-heading p {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .section-number {
+      font-family: Georgia, serif;
+      font-size: 70px;
+      line-height: 0.7;
+      color: var(--border);
+    }
+
+    /* --------------------------------
+       Cards
+    -------------------------------- */
+
+    .chart-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 25px;
+      margin-bottom: 55px;
+      box-shadow:
+        0 1px 2px rgba(0,0,0,0.02),
+        0 15px 40px rgba(0,0,0,0.025);
+    }
+
+    .chart-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 20px;
+      margin-bottom: 25px;
+    }
+
+    .chart-card h3 {
+      margin: 0;
+      font-size: 19px;
+      letter-spacing: -0.025em;
+    }
+
+    .chart-card .description {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .chart-badge {
+      flex-shrink: 0;
+      padding: 6px 9px;
+      border-radius: 7px;
+      background: var(--hop-light);
+      color: var(--hop-dark);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .chart-wrapper {
+      position: relative;
+      height: 360px;
+    }
+
+    /* --------------------------------
+       Stats
+    -------------------------------- */
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 15px;
+      margin-bottom: 80px;
+    }
+
+    .stat {
+      padding: 25px;
+      border: 1px solid var(--border);
+      border-radius: 15px;
+      background: rgba(255,255,255,0.28);
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .stat-value {
+      margin-top: 5px;
+      font-size: 34px;
+      font-weight: 800;
+      letter-spacing: -0.05em;
+    }
+
+    .stat-change {
+      color: var(--hop-dark);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    /* --------------------------------
+       Footer
+    -------------------------------- */
+
+    footer {
+      padding: 50px 0;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .footer-inner {
+      display: flex;
+      justify-content: space-between;
+      gap: 30px;
+    }
+
+    footer strong {
+      color: var(--ink);
+    }
+
+    /* --------------------------------
+       Responsive
+    -------------------------------- */
+
+    @media (max-width: 700px) {
+      header {
+        padding-bottom: 70px;
+      }
+
+      .nav {
+        margin-bottom: 70px;
+      }
+
+      .status {
+        display: none;
+      }
+
+      .container {
+        width: min(100% - 28px, 1120px);
+      }
+
+      main {
+        padding: 55px 0;
+      }
+
+      .stats {
+        grid-template-columns: 1fr;
+      }
+
+      .chart-card {
+        padding: 17px;
+        border-radius: 14px;
+      }
+
+      .chart-wrapper {
+        height: 300px;
+      }
+
+      .section-number {
+        display: none;
+      }
+
+      .footer-inner {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <div class="container">
+
+    <nav class="nav">
+      <div class="brand">
+        <div class="hop-mark">✦</div>
+        <div>Top of The Hops</div>
+      </div>
+
+      <div class="status">
+        <span class="status-dot"></span>
+        Data freshly tapped
+      </div>
+    </nav>
+
+    <div class="hero">
+
+      <div class="eyebrow">
+        🍺 Homebrew analytics
+      </div>
+
+      <h1>
+        Top of<br>
+        The <span>Hops.</span>
+      </h1>
+
+      <p class="hero-copy">
+        Trending Homebrew packages, freshly scraped and served without
+        the artisanal bullshit.
+      </p>
+
+      <div class="hero-meta">
+        <div class="pill">Homebrew</div>
+        <div class="pill">Trending packages</div>
+        <div class="pill">Updated daily</div>
+      </div>
+
+    </div>
+  </div>
+</header>
+
+
+<main>
+  <div class="container">
+
+    <!-- Quick stats -->
+
+    <div class="stats">
+
+      <div class="stat">
+        <div class="stat-label">Packages tracked</div>
+        <div class="stat-value">1,284</div>
+        <div class="stat-change">↑ 8.4% this month</div>
+      </div>
+
+      <div class="stat">
+        <div class="stat-label">Biggest climber</div>
+        <div class="stat-value">ripgrep</div>
+        <div class="stat-change">↑ 31% installs</div>
+      </div>
+
+      <div class="stat">
+        <div class="stat-label">Current favourite</div>
+        <div class="stat-value">wget</div>
+        <div class="stat-change">Still refusing to die</div>
+      </div>
+
+    </div>
+
+
+    <!-- Chart 1 -->
+
+    <div class="section-heading">
+      <div>
+        <div class="section-number">01</div>
+        <h2>What’s rising?</h2>
+        <p>The packages currently gaining the most momentum.</p>
+      </div>
+    </div>
+
+    <div class="chart-card">
+
+      <div class="chart-card-header">
+        <div>
+          <h3>The movers &amp; shakers</h3>
+          <p class="description">
+            Percentage change in installs over the selected period.
+          </p>
+        </div>
+
+        <div class="chart-badge">7 DAY CHANGE</div>
+      </div>
+
+      <div class="chart-wrapper">
+        <canvas id="risingChart"></canvas>
+      </div>
+
+    </div>
+
+
+    <!-- Chart 2 -->
+
+    <div class="section-heading">
+      <div>
+        <div class="section-number">02</div>
+        <h2>What’s pouring?</h2>
+        <p>The packages everyone seems to be installing right now.</p>
+      </div>
+    </div>
+
+    <div class="chart-card">
+
+      <div class="chart-card-header">
+        <div>
+          <h3>The current tap list</h3>
+          <p class="description">
+            Most installed Homebrew packages in the latest scrape.
+          </p>
+        </div>
+
+        <div class="chart-badge">TOP 10</div>
+      </div>
+
+      <div class="chart-wrapper">
+        <canvas id="popularChart"></canvas>
+      </div>
+
+    </div>
+
+
+    <!-- Chart 3 -->
+
+    <div class="section-heading">
+      <div>
+        <div class="section-number">03</div>
+        <h2>The long pour.</h2>
+        <p>Because sometimes you need to know where things are headed.</p>
+      </div>
+    </div>
+
+    <div class="chart-card">
+
+      <div class="chart-card-header">
+        <div>
+          <h3>Popularity over time</h3>
+          <p class="description">
+            Installation trends for a selection of popular packages.
+          </p>
+        </div>
+
+        <div class="chart-badge">30 DAYS</div>
+      </div>
+
+      <div class="chart-wrapper">
+        <canvas id="trendChart"></canvas>
+      </div>
+
+    </div>
+
+  </div>
+</main>
+
+
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div>
+        <strong>Top of The Hops</strong><br>
+        Homebrew package trends, minus the hangover.
+      </div>
+
+      <div>
+        Last tapped: <span id="lastUpdated"></span><br>
+        No lagers were harmed in the making of these charts.
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+<script>
+
+  /*
+   * ============================================================
+   * DATA
+   * ============================================================
+   *
+   * Your scraper can replace this object.
+   *
+   * For example:
+   *
+   * window.HOMEBREW_DATA = {
+   *   rising: {
+   *     labels: [...],
+   *     values: [...]
+   *   },
+   *   popular: {
+   *     labels: [...],
+   *     values: [...]
+   *   },
+   *   trend: {
+   *     labels: [...],
+   *     datasets: [...]
+   *   }
+   * }
+   *
+   * ============================================================
+   */
+
+  const HOMEBREW_DATA = {
+
+    rising: {
+      labels: [
+        "ripgrep",
+        "jq",
+        "fzf",
+        "fd",
+        "bat",
+        "neovim",
+        "htop"
+      ],
+      values: [
+        31,
+        24,
+        19,
+        15,
+        12,
+        9,
+        7
+      ]
+    },
+
+    popular: {
+      labels: [
+        "wget",
+        "git",
+        "python",
+        "node",
+        "jq",
+        "curl",
+        "ripgrep",
+        "ffmpeg",
+        "fzf",
+        "neovim"
+      ],
+      values: [
+        98400,
+        92100,
+        85600,
+        81300,
+        74200,
+        71100,
+        68900,
+        62400,
+        58100,
+        54700
+      ]
+    },
+
+    trend: {
+      labels: [
+        "Aug 13",
+        "Aug 16",
+        "Aug 19",
+        "Aug 22",
+        "Aug 25",
+        "Aug 28",
+        "Aug 31",
+        "Sep 3",
+        "Sep 6",
+        "Sep 9"
+      ],
+
+      datasets: [
+        {
+          label: "ripgrep",
+          data: [
+            42000, 43500, 44900, 47200, 49800,
+            52100, 54800, 58300, 63100, 68900
+          ]
+        },
+        {
+          label: "fzf",
+          data: [
+            39000, 40100, 41500, 42900, 43800,
+            45100, 46900, 49200, 52700, 58100
+          ]
+        },
+        {
+          label: "neovim",
+          data: [
+            37000, 37800, 38900, 39600, 41100,
+            42300, 43700, 45600, 48900, 54700
+          ]
+        }
+      ]
+    }
+  };
+
+
+  /*
+   * ============================================================
+   * CHART DEFAULTS
+   * ============================================================
+   */
+
+  Chart.defaults.font.family =
+    'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+  Chart.defaults.color = "#6d7066";
+
+  const gridColor = "#e7e4da";
+
+  const commonOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+
+    plugins: {
+      legend: {
+        labels: {
+          usePointStyle: true,
+          pointStyle: "circle",
+          padding: 20
+        }
+      },
+
+      tooltip: {
+        backgroundColor: "#171914",
+        titleColor: "#ffffff",
+        bodyColor: "#ffffff",
+        padding: 12,
+        cornerRadius: 8,
+        displayColors: true
+      }
+    },
+
+    scales: {
+      x: {
+        grid: {
+          display: false
+        },
+
+        border: {
+          display: false
+        },
+
+        ticks: {
+          padding: 8
+        }
+      },
+
+      y: {
+        grid: {
+          color: gridColor
+        },
+
+        border: {
+          display: false
+        },
+
+        ticks: {
+          padding: 8
+        }
+      }
+    }
+  };
+
+
+  /*
+   * ============================================================
+   * CHART 1 — RISING
+   * ============================================================
+   */
+
+  new Chart(
+    document.getElementById("risingChart"),
+    {
+      type: "bar",
+
+      data: {
+        labels: HOMEBREW_DATA.rising.labels,
+
+        datasets: [
+          {
+            label: "Install growth",
+            data: HOMEBREW_DATA.rising.values,
+
+            backgroundColor: "#4f7c45",
+            borderRadius: 6,
+
+            barThickness: 28
+          }
+        ]
+      },
+
+      options: {
+        ...commonOptions,
+
+        plugins: {
+          ...commonOptions.plugins,
+
+          legend: {
+            display: false
+          },
+
+          tooltip: {
+            ...commonOptions.plugins.tooltip,
+
+            callbacks: {
+              label: context =>
+                `  +${context.raw}%`
+            }
+          }
+        },
+
+        scales: {
+          ...commonOptions.scales,
+
+          y: {
+            ...commonOptions.scales.y,
+
+            beginAtZero: true,
+
+            ticks: {
+              callback: value => `${value}%`
+            }
+          }
+        }
+      }
+    }
+  );
+
+
+  /*
+   * ============================================================
+   * CHART 2 — MOST POPULAR
+   * ============================================================
+   */
+
+  new Chart(
+    document.getElementById("popularChart"),
+    {
+      type: "bar",
+
+      data: {
+        labels: HOMEBREW_DATA.popular.labels,
+
+        datasets: [
+          {
+            label: "Installs",
+            data: HOMEBREW_DATA.popular.values,
+
+            backgroundColor: "#31552e",
+            borderRadius: 6,
+
+            barThickness: 24
+          }
+        ]
+      },
+
+      options: {
+        ...commonOptions,
+
+        indexAxis: "y",
+
+        plugins: {
+          ...commonOptions.plugins,
+
+          legend: {
+            display: false
+          },
+
+          tooltip: {
+            ...commonOptions.plugins.tooltip,
+
+            callbacks: {
+              label: context =>
+                `  ${context.raw.toLocaleString()} installs`
+            }
+          }
+        },
+
+        scales: {
+          x: {
+            ...commonOptions.scales.y,
+
+            beginAtZero: true,
+
+            ticks: {
+              callback: value =>
+                value >= 1000
+                  ? `${Math.round(value / 1000)}k`
+                  : value
+            }
+          },
+
+          y: {
+            ...commonOptions.scales.x
+          }
+        }
+      }
+    }
+  );
+
+
+  /*
+   * ============================================================
+   * CHART 3 — TREND
+   * ============================================================
+   */
+
+  new Chart(
+    document.getElementById("trendChart"),
+    {
+      type: "line",
+
+      data: {
+        labels: HOMEBREW_DATA.trend.labels,
+
+        datasets: HOMEBREW_DATA.trend.datasets.map((dataset, index) => ({
+          ...dataset,
+
+          borderColor: [
+            "#4f7c45",
+            "#c48a38",
+            "#171914"
+          ][index],
+
+          backgroundColor: "transparent",
+
+          borderWidth: 2.5,
+
+          pointRadius: 3,
+
+          pointHoverRadius: 6,
+
+          tension: 0.35
+        }))
+      },
+
+      options: {
+        ...commonOptions,
+
+        interaction: {
+          intersect: false,
+          mode: "index"
+        },
+
+        plugins: {
+          ...commonOptions.plugins,
+
+          tooltip: {
+            ...commonOptions.plugins.tooltip,
+
+            callbacks: {
+              label: context =>
+                `  ${context.dataset.label}: ${context.raw.toLocaleString()}`
+            }
+          }
+        },
+
+        scales: {
+          ...commonOptions.scales,
+
+          y: {
+            ...commonOptions.scales.y,
+
+            ticks: {
+              callback: value =>
+                value >= 1000
+                  ? `${Math.round(value / 1000)}k`
+                  : value
+            }
+          }
+        }
+      }
+    }
+  );
+
+
+  /*
+   * ============================================================
+   * FOOTER DATE
+   * ============================================================
+   */
+
+  document.getElementById("lastUpdated").textContent =
+    new Date().toLocaleString(undefined, {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+
+</script>
+
+</body>
+</html>
