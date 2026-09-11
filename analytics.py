@@ -151,6 +151,17 @@ pkgs = set(brew_search("/(?i)^(?!.*(?:backend)).*search|find.*/"))
 match_list = ", ".join(f"'{name}'" for name in pkgs)
 df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
 top_trend(df, "search tools")
+# %% container runers
+
+pkgs = brew_search(
+    "/(?i)(?=.*container)(?=.*(build|run(ner|times?)?|desktop|gui|manag(e|ing)))/"
+)
+
+match_list = ", ".join(f"'{name}'" for name in pkgs)
+df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
+
+top_trend(merge_names(df), "container runners")
+
 # %% javascript runtimes
 
 pkgs = brew_search("/(?i)(?=.*javascript)(?=.*runtime)/")
