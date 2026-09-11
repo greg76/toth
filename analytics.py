@@ -37,25 +37,6 @@ def brew_search(desc: str) -> list[str | None]:
         line.partition(":")[0] for line in result.stdout.splitlines() if ":" in line
     ]
 
-def top_chart(
-    casks: list[tuple[str, int]],
-    title: str | None = None,
-    merge: bool = True,
-    limit: int | None = 10,
-) -> None:
-    df = pd.DataFrame(casks, columns=["Cask name", "Request count"])
-
-    # Extract base name before '@', group, and sum
-    if merge:
-        base_names = df["Cask name"].str.split("@").str[0]
-        df = pd.DataFrame(df.groupby(base_names, as_index=False)["Request count"].sum())
-
-    top_df = df.sort_values(by="Request count", ascending=False).head(limit)
-
-    sns.barplot(x="Request count", y="Cask name", data=top_df)
-    plt.title(f"Top {limit} {title if title else ''}")
-    plt.show()
-
 def top_trend(df: DataFrame, title: str | None = None, limit: int | None = 5) -> None:
     df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
     latest_date = df["date"].max()
@@ -99,6 +80,44 @@ def merge_names(
     result = df.copy()
     result[name_col] = result[name_col].str.split("@").str[0]
     return result.groupby([name_col, date_col], as_index=False)[count_col].sum()
+
+# %% top gainers
+
+df = pd.read_sql_query(
+    """
+    WITH last_two_dates AS (
+      SELECT DISTINCT date FROM counts ORDER BY date DESC LIMIT 2
+    ),
+    prev AS (
+      SELECT name_id, count
+      FROM counts
+      WHERE date = (SELECT MIN(date) FROM last_two_dates)
+    ),
+    curr AS (
+      SELECT name_id, count
+      FROM counts
+      WHERE date = (SELECT MAX(date) FROM last_two_dates)
+    )
+    SELECT
+      names.name,
+      -- prev.count AS prev_count,
+      -- curr.count AS curr_count,
+      ROUND((curr.count - prev.count) * 100.0 / prev.count, 2) AS pct_growth
+    FROM curr
+    JOIN prev  ON prev.name_id = curr.name_id
+    JOIN names ON names.name_id = curr.name_id
+    WHERE prev.count > 750
+    ORDER BY pct_growth DESC
+    LIMIT 10;
+    """,
+    conn,
+)
+
+sns.barplot(x="pct_growth", y="name", data=df)
+plt.ylabel("Package name")
+plt.xlabel("Growth percentage (%)")
+plt.title("Top gainers last week")
+plt.show()
 
 
 # %% terminal emulators over time
