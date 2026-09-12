@@ -15,8 +15,16 @@ QUERY = """
 SELECT counts.date, names.name, counts.count
 FROM counts
 JOIN names ON names.name_id = counts.name_id
-WHERE names.name {}
-ORDER BY counts.date
+WHERE counts.name_id IN (
+    SELECT counts.name_id
+    FROM counts
+    JOIN names ON names.name_id = counts.name_id
+    WHERE names.name {}
+      AND counts.date = (SELECT MAX(date) FROM counts)
+    ORDER BY counts.count DESC
+    LIMIT 10
+)
+ORDER BY counts.date, names.name
 """
 
 def brew_search(desc: str) -> list[str | None]:
