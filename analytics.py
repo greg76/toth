@@ -6,6 +6,7 @@ import subprocess
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+from matplotlib.ticker import EngFormatter
 from pandas.core.frame import DataFrame
 
 DB_PATH = "brew_stats.db"
@@ -54,7 +55,9 @@ def top_trend(df: DataFrame, title: str | None = None, limit: int | None = 5) ->
         dashes=False,
     )
     ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1))
+    ax.yaxis.set_major_formatter(EngFormatter())
     plt.xticks(rotation=90)
+    plt.ylabel("installs")
     plt.title(f"Top {min(limit, df['name'].nunique())} {title if title else ''}")
     plt.show()
 
@@ -119,6 +122,52 @@ plt.xlabel("Growth percentage (%)")
 plt.title("Top gainers last week")
 plt.show()
 
+# %% new entries
+
+df = pd.read_sql_query(
+    """
+    WITH ranked AS (
+        SELECT
+            counts.name_id,
+            names.name,
+            counts.date,
+            counts.count,
+            ROW_NUMBER() OVER (
+                PARTITION BY counts.name_id
+                ORDER BY counts.date DESC
+            ) AS rn,
+            MAX(
+                CASE
+                    WHEN counts.count <> 0 THEN 1
+                    ELSE 0
+                END
+            ) OVER (
+                PARTITION BY counts.name_id
+                ORDER BY counts.date
+                ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+            ) AS had_previous_event
+        FROM counts
+        JOIN names ON names.name_id = counts.name_id
+    )
+    SELECT
+        date,
+        name,
+        count
+    FROM ranked
+    WHERE rn = 1
+      AND COALESCE(had_previous_event, 0) = 0
+    ORDER BY count DESC
+    LIMIT 10;
+    """,
+    conn,
+)
+
+sns.barplot(x="count", y="name", data=df)
+plt.ylabel("Package name")
+plt.xlabel("Installs")
+plt.title("Top new entries last week")
+plt.show()
+
 
 # %% terminal emulators over time
 
@@ -180,6 +229,18 @@ match_list = ", ".join(f"'{name}'" for name in pkgs)
 df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
 
 top_trend(merge_names(df), "container runners")
+# %% languages and runtimes
+
+pkgs = set(
+    brew_search(
+        "/(?i)(?=.*(?:programming|compiler|interpreter|scripting|sdk))(?=.*language)/"
+    )
+    + brew_search("/(?i)(?=.*javascript)(?=.*runtime)/")
+    + ["rust", "typescript"]
+)
+df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
+top_trend(merge_names(df), "languages and runtimes", 10)
+
 
 # %% javascript runtimes
 
