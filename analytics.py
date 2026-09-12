@@ -82,6 +82,7 @@ def merge_names(
     """
     result = df.copy()
     result[name_col] = result[name_col].str.split("@").str[0]
+    result[name_col] = result[name_col].str.split("/").str[-1]
     return result.groupby([name_col, date_col], as_index=False)[count_col].sum()
 
 # %% top gainers
@@ -168,19 +169,11 @@ plt.xlabel("Installs")
 plt.title("Top new entries last week")
 plt.show()
 
-
-# %% terminal emulators over time
-
-match_list = ", ".join(f"'{name}'" for name in brew_search("terminal emulator"))
-
-df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-top_trend(df, "terminal emulators")
-
 # %% code editors over time
 
 match_list = ", ".join(
     f"'{name}'"
-    for name in brew_search("/.*edit.*code.*/") + brew_search("/.*code.*edit.*/")
+    for name in brew_search(r"/.*edit.*code.*/") + brew_search(r"/.*code.*edit.*/")
 )
 
 df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
@@ -189,18 +182,38 @@ top_trend(df, "code editors")
 # %% coding agents over time
 
 agents = brew_search(
-    r"/(?i)^(?!.*menu bar)(?!.*status).*\bcoding\b\s\b(agent|assistant)\b.*/"
+    r"/(?i)^(?!.*menu bar)(?!.*status).*\bcod(e|ing)\b\s\b(agent|assistant)\b.*/"
 )
 agents += [
     "antigravity-cli",
     "gemini-cli",
     "charmbracelet/tap/crush",
     "anomalyco/tap/opencode",
+    "pi-coding-agent",
+    "cline",
+    "aider",
+    "mimo-code",
+    "block-goose-cli",
+    "block-goose",
 ]
 
 match_list = ", ".join(f"'{name}'" for name in agents)
 df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-top_trend(df, "coding agents")
+top_trend(merge_names(df), "coding harnesses")
+# %% agent harnesses
+pkgs = set(
+    brew_search(
+        r"/(?i)^(?!.*(?:operator|IDE|scanner|orchestrator|command|container|manage(r)?)).*\bai agent\b/"
+    )
+    + brew_search("agent runtime")
+)
+
+match_list = ", ".join(f"'{name}'" for name in pkgs)
+df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
+
+top_trend(merge_names(df), "AI agents")
+
+
 # %% python package managers
 pkgs = set(
     brew_search("/(?i)^(?!.*(?:token|dictation)).*LLM.*/")
@@ -213,12 +226,7 @@ match_list = ", ".join(f"'{name}'" for name in pkgs)
 df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
 
 top_trend(df, "LLM runners")
-# %% search tools
 
-pkgs = set(brew_search("/(?i)^(?!.*(?:backend)).*search|find.*/"))
-match_list = ", ".join(f"'{name}'" for name in pkgs)
-df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-top_trend(df, "search tools")
 # %% container runers
 
 pkgs = brew_search(
@@ -233,13 +241,14 @@ top_trend(merge_names(df), "container runners")
 
 pkgs = set(
     brew_search(
-        "/(?i)(?=.*(?:programming|compiler|interpreter|scripting|sdk))(?=.*language)/"
+        r"/(?i)(?=.*(?:programming|compiler|interpreter|scripting|sdk))(?=.*language)/"
     )
-    + brew_search("/(?i)(?=.*javascript)(?=.*runtime)/")
+    + brew_search(r"/(?i)(?=.*javascript)(?=.*runtime)/")
     + ["rust", "typescript"]
 )
+match_list = ", ".join(f"'{name}'" for name in pkgs)
 df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-top_trend(merge_names(df), "languages and runtimes", 10)
+top_trend(merge_names(df), "languages and runtimes")
 
 
 # %% javascript runtimes
@@ -266,6 +275,21 @@ pkgs = set(
 match_list = ", ".join(f"'{name}'" for name in pkgs)
 df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
 top_trend(df, "python package managers")
+
+# %% terminal emulators over time
+
+match_list = ", ".join(f"'{name}'" for name in brew_search("terminal emulator"))
+
+df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
+top_trend(df, "terminal emulators")
+
+# %% search tools
+
+pkgs = set(brew_search("/(?i)^(?!.*(?:backend)).*search|find.*/"))
+match_list = ", ".join(f"'{name}'" for name in pkgs)
+df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
+top_trend(df, "search tools")
+
 # %% compression tools
 
 pkgs = set(
