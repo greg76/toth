@@ -118,7 +118,7 @@ df = pd.read_sql_query(
     FROM curr
     JOIN prev  ON prev.name_id = curr.name_id
     JOIN names ON names.name_id = curr.name_id
-    WHERE prev.count > 750
+    -- WHERE prev.count > 750
     ORDER BY pct_growth DESC
     LIMIT 10;
     """,
