@@ -1,11 +1,14 @@
 # %% imports, constants, helper functions
 
+import json
 import sqlite3
 import subprocess
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+from compression import zstd
 from matplotlib.ticker import EngFormatter
 from pandas.core.frame import DataFrame
 
@@ -27,6 +30,7 @@ WHERE counts.name_id IN (
 ORDER BY counts.date, names.name
 """
 
+
 def brew_search(desc: str) -> list[str | None]:
     command = ["brew", "search", "--desc", desc.strip()]
 
@@ -45,6 +49,7 @@ def brew_search(desc: str) -> list[str | None]:
     return [
         line.partition(":")[0] for line in result.stdout.splitlines() if ":" in line
     ]
+
 
 def top_trend(df: DataFrame, title: str | None = None, limit: int | None = 5) -> None:
     df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
@@ -68,6 +73,7 @@ def top_trend(df: DataFrame, title: str | None = None, limit: int | None = 5) ->
     plt.ylabel("installs")
     plt.title(f"Top {min(limit, df['name'].nunique())} {title if title else ''}")
     plt.show()
+
 
 def merge_names(
     df: pd.DataFrame,
@@ -93,6 +99,42 @@ def merge_names(
     result[name_col] = result[name_col].str.split("/").str[-1]
     return result.groupby([name_col, date_col], as_index=False)[count_col].sum()
 
+# %% total install counts from dumps
+
+dumps_dir = (
+    Path("dumps")
+    if Path("dumps").exists()
+    else Path(__file__).resolve().parent / "dumps"
+)
+
+data_list = []
+for path in sorted(dumps_dir.glob("*.zst")):
+    with zstd.open(path, "rt", encoding="utf-8") as f:
+        try:
+            content = json.load(f)
+            category = content.get("category")
+            end_date = content.get("end_date")
+            total_count = content.get("total_count")
+            if (
+                category is not None
+                and end_date is not None
+                and total_count is not None
+            ):
+                data_list.append(
+                    {
+                        "name": category,
+                        "date": end_date,
+                        "count": int(total_count),
+                    }
+                )
+        except (json.JSONDecodeError, OSError, ValueError) as e:
+            print(f"Error reading {path}: {e}")
+
+df_dumps = pd.DataFrame(data_list)
+df_dumps["date"] = pd.to_datetime(df_dumps["date"])
+df_dumps = df_dumps.sort_values("date")
+
+top_trend(df_dumps, "Total Installs over Time by Category")
 # %% top gainers
 
 df = pd.read_sql_query(
@@ -325,4 +367,3 @@ top_trend(df, "web browsers")
 match_list = ", ".join(f"'{name}'" for name in brew_search("media player"))
 df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
 top_trend(df, "media players")
-
