@@ -253,18 +253,22 @@ top_trend(merge_names(df), "coding harnesses")
 # %% agent harnesses
 pkgs = set(
     brew_search(
-        r"/(?i)^(?!.*(?:operator|IDE|scanner|orchestrator|command|container|manage(r)?)).*\bai agent\b/"
+        r"/(?i)^(?!.*(?:operator|cod(e|ing)|IDE|scanner|orchestrator|command|container|manage(r)?)).*\bai (agent|assistant)\b/"
     )
     + brew_search("agent runtime")
 )
 
-match_list = ", ".join(f"'{name}'" for name in pkgs)
+match_list = ", ".join(
+    f"'{name}'"
+    for name in pkgs
+    if not any(keyword in str(name) for keyword in ["coding", "code"])
+)
 df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
 
 top_trend(merge_names(df), "AI agents")
 
 
-# %% python package managers
+# %% LLM runners
 pkgs = set(
     brew_search("/(?i)^(?!.*(?:token|dictation)).*LLM.*/")
     + brew_search("/(?i)^.*offline ai.*/")
