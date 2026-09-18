@@ -15,21 +15,39 @@ from pandas.core.frame import DataFrame
 DB_PATH = "brew_stats.db"
 conn = sqlite3.connect(DB_PATH)
 QUERY = """
-SELECT counts.date, names.name, counts.count
-FROM counts
-JOIN names ON names.name_id = counts.name_id
-WHERE counts.name_id IN (
-    SELECT counts.name_id
+WITH cleaned AS (
+    SELECT
+        counts.date,
+        counts.count,
+        substr(names.name, 1, instr(names.name || '@', '@') - 1) AS no_at
     FROM counts
     JOIN names ON names.name_id = counts.name_id
     WHERE names.name {}
-      AND counts.date = (SELECT MAX(date) FROM counts)
-    ORDER BY counts.count DESC
-    LIMIT 10
+),
+normalized AS (
+    SELECT
+        date,
+        count,
+        replace(no_at, rtrim(no_at, replace(no_at, '/', '')), '') AS name
+    FROM cleaned
+),
+merged AS (
+    SELECT date, name, SUM(count) AS count
+    FROM normalized
+    GROUP BY date, name
+),
+top_names AS (
+    SELECT name
+    FROM merged
+    WHERE date = (SELECT MAX(date) FROM counts)
+    ORDER BY count DESC, name
+    LIMIT 5
 )
-ORDER BY counts.date, names.name
+SELECT date, name, count
+FROM merged
+WHERE name IN (SELECT name FROM top_names)
+ORDER BY date, name
 """
-
 
 def brew_search(desc: str) -> list[str | None]:
     command = ["brew", "search", "--desc", desc.strip()]
@@ -51,18 +69,23 @@ def brew_search(desc: str) -> list[str | None]:
     ]
 
 
-def top_trend(df: DataFrame, title: str | None = None, limit: int | None = 5) -> None:
+def top_trend(df: DataFrame, title: str | None = None) -> None:
     df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
     latest_date = df["date"].max()
-    top = df[df["date"] == latest_date].nlargest(limit, "count")["name"]
-    plot_df = df[df["name"].isin(top)]
+
+    # order names by their value on the last date (descending)
+    last_values = df[df["date"] == latest_date].set_index("name")["count"]
+    order = last_values.sort_values(ascending=False).index.tolist()
+
+    # names with no data on the last date go at the end
+    order += [n for n in df["name"].unique() if n not in order]
 
     ax = sns.lineplot(
-        data=plot_df,
+        data=df,
         x="date",
         y="count",
         hue="name",
-        hue_order=top,
+        hue_order=order,
         style="name",
         markers=True,
         dashes=False,
@@ -71,33 +94,8 @@ def top_trend(df: DataFrame, title: str | None = None, limit: int | None = 5) ->
     ax.yaxis.set_major_formatter(EngFormatter())
     plt.xticks(rotation=90)
     plt.ylabel("installs")
-    plt.title(f"Top {min(limit, df['name'].nunique())} {title if title else ''}")
+    plt.title(f"Top {title if title else 'list'}")
     plt.show()
-
-
-def merge_names(
-    df: pd.DataFrame,
-    name_col: str = "name",
-    count_col: str = "count",
-    date_col: str = "date",
-) -> pd.DataFrame:
-    """
-    Merge names containing '@' into their base name and aggregate counts
-    per name per date.
-
-    Args:
-        df: Input DataFrame.
-        name_col: Column containing names (e.g. 'node@22').
-        count_col: Column with values to sum.
-        date_col: Column to group dates by.
-
-    Returns:
-        A new DataFrame with merged names and summed counts.
-    """
-    result = df.copy()
-    result[name_col] = result[name_col].str.split("@").str[0]
-    result[name_col] = result[name_col].str.split("/").str[-1]
-    return result.groupby([name_col, date_col], as_index=False)[count_col].sum()
 
 # %% total install counts from dumps
 
@@ -231,25 +229,39 @@ top_trend(df, "code editors")
 
 # %% coding agents over time
 
-agents = brew_search(
-    r"/(?i)^(?!.*menu bar)(?!.*status).*\bcod(e|ing)\b\s\b(agent|assistant)\b.*/"
+agents = set(
+    brew_search(
+        r"/(?i)\A(?!.*(?:menu bar|status|pet|memory upgrade)).*\bcod(e|ing)\b\s\b(agent|assistant)\b.*/"
+    )
+    + brew_search(
+        r"/(?i)\A(?!.*(?:review|documentation|language|workout|usage tracker|manage)).*\bAI\b.*(?:programming|code)/"
+    )
 )
-agents += [
-    "antigravity-cli",
-    "gemini-cli",
-    "charmbracelet/tap/crush",
-    "anomalyco/tap/opencode",
-    "pi-coding-agent",
-    "cline",
-    "aider",
-    "mimo-code",
-    "block-goose-cli",
-    "block-goose",
-]
+
+"""
+with zstd.open("descriptions.json.zst", "rb") as f:
+    descriptions = json.loads(f.read().decode("utf-8"))
+
+max_len = max(len(agent) for agent in agents)
+
+for agent in sorted(agents):
+    print(f"{agent:<{max_len}}\t{descriptions.get(agent)}")
+"""
+
+agents.update(
+    [
+        "antigravity",  # Agent orchestration platform
+        "antigravity-cli",  # Terminal interface for Antigravity agents
+        "gemini-cli",  # Interact with Google Gemini AI models from the command-line
+        "charmbracelet/tap/crush",
+        "anomalyco/tap/opencode",
+        "pi-coding-agent",  # AI agent toolkit
+    ]
+)
 
 match_list = ", ".join(f"'{name}'" for name in agents)
 df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-top_trend(merge_names(df), "coding harnesses")
+top_trend(df, "coding harnesses")
 # %% agent harnesses
 pkgs = set(
     brew_search(
@@ -257,6 +269,7 @@ pkgs = set(
     )
     + brew_search("agent runtime")
 )
+pkgs -= {"google-gemini"}
 
 match_list = ", ".join(
     f"'{name}'"
@@ -265,7 +278,7 @@ match_list = ", ".join(
 )
 df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
 
-top_trend(merge_names(df), "AI agents")
+top_trend(df, "AI agents")
 
 
 # %% LLM runners
@@ -290,7 +303,7 @@ pkgs = brew_search(
 match_list = ", ".join(f"'{name}'" for name in pkgs)
 df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
 
-top_trend(merge_names(df), "container runners")
+top_trend(df, "container runners")
 # %% languages and runtimes
 
 pkgs = set(
@@ -302,7 +315,7 @@ pkgs = set(
 )
 match_list = ", ".join(f"'{name}'" for name in pkgs)
 df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-top_trend(merge_names(df), "languages and runtimes")
+top_trend(df, "languages and runtimes")
 
 
 # %% javascript runtimes
@@ -311,13 +324,8 @@ pkgs = brew_search("/(?i)(?=.*javascript)(?=.*runtime)/")
 match_list = ", ".join(f"'{name}'" for name in pkgs)
 df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
 
-top_trend(merge_names(df), "javascript runtimes")
+top_trend(df, "javascript runtimes")
 
-
-# %% top python versions
-
-df = pd.read_sql_query(QUERY.format("LIKE 'python@%'"), conn)
-top_trend(df, "python versions")
 # %% python package managers
 pkgs = set(
     brew_search("python package")
@@ -358,16 +366,3 @@ top_trend(df, "compression packages")
 
 df = pd.read_sql_query(QUERY.format("LIKE 'font-%'"), conn)
 top_trend(df, "fonts")
-
-# %% browsers over time
-
-match_list = ", ".join(f"'{name}'" for name in brew_search("web browser"))
-df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-top_trend(df, "web browsers")
-
-
-# %% media players
-
-match_list = ", ".join(f"'{name}'" for name in brew_search("media player"))
-df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-top_trend(df, "media players")
