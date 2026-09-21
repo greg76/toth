@@ -418,6 +418,36 @@
     <div class="section-heading">
       <div>
         <div class="section-number">01</div>
+        <h2>What’s pouring?</h2>
+        <p>Total installs across Homebrew categories over time.</p>
+      </div>
+    </div>
+
+    <div class="chart-card">
+
+      <div class="chart-card-header">
+        <div>
+          <h3>Total installs by category</h3>
+          <p class="description">
+            Weekly total installs from the latest Homebrew snapshots.
+          </p>
+        </div>
+
+        <div class="chart-badge">WEEKLY TOTALS</div>
+      </div>
+
+      <div class="chart-wrapper">
+        <canvas id="totalInstallsChart"></canvas>
+      </div>
+
+    </div>
+
+
+    <!-- Chart 2 -->
+
+    <div class="section-heading">
+      <div>
+        <div class="section-number">02</div>
         <h2>What’s rising?</h2>
         <p>The packages currently gaining the most momentum.</p>
       </div>
@@ -429,45 +459,15 @@
         <div>
           <h3>The movers &amp; shakers</h3>
           <p class="description">
-            Percentage change in installs over the selected period.
+            Percentage change in installs over the latest week.
           </p>
         </div>
 
-        <div class="chart-badge">7 DAY CHANGE</div>
+        <div class="chart-badge">WEEK-OVER-WEEK</div>
       </div>
 
       <div class="chart-wrapper">
         <canvas id="risingChart"></canvas>
-      </div>
-
-    </div>
-
-
-    <!-- Chart 2 -->
-
-    <div class="section-heading">
-      <div>
-        <div class="section-number">02</div>
-        <h2>What’s pouring?</h2>
-        <p>The packages everyone seems to be installing right now.</p>
-      </div>
-    </div>
-
-    <div class="chart-card">
-
-      <div class="chart-card-header">
-        <div>
-          <h3>The current tap list</h3>
-          <p class="description">
-            Most installed Homebrew packages in the latest scrape.
-          </p>
-        </div>
-
-        <div class="chart-badge">TOP 10</div>
-      </div>
-
-      <div class="chart-wrapper">
-        <canvas id="popularChart"></canvas>
       </div>
 
     </div>
@@ -478,6 +478,36 @@
     <div class="section-heading">
       <div>
         <div class="section-number">03</div>
+        <h2>What’s new?</h2>
+        <p>The newest packages making an entrance.</p>
+      </div>
+    </div>
+
+    <div class="chart-card">
+
+      <div class="chart-card-header">
+        <div>
+          <h3>Fresh on tap</h3>
+          <p class="description">
+            The highest-install packages with no previous recorded event.
+          </p>
+        </div>
+
+        <div class="chart-badge">TOP 10</div>
+      </div>
+
+      <div class="chart-wrapper">
+        <canvas id="newEntriesChart"></canvas>
+      </div>
+
+    </div>
+
+
+    <!-- Chart 4 -->
+
+    <div class="section-heading">
+      <div>
+        <div class="section-number">04</div>
         <h2>The long pour.</h2>
         <p>Because sometimes you need to know where things are headed.</p>
       </div>
@@ -487,17 +517,17 @@
 
       <div class="chart-card-header">
         <div>
-          <h3>Popularity over time</h3>
+          <h3>Code editor momentum</h3>
           <p class="description">
-            Installation trends for a selection of popular packages.
+            Installation trends for the top code editors in the latest scrape.
           </p>
         </div>
 
-        <div class="chart-badge">30 DAYS</div>
+        <div class="chart-badge">WEEKLY TRENDS</div>
       </div>
 
       <div class="chart-wrapper">
-        <canvas id="trendChart"></canvas>
+        <canvas id="codeEditorsChart"></canvas>
       </div>
 
     </div>
@@ -535,15 +565,19 @@
    * For example:
    *
    * window.HOMEBREW_DATA = {
-   *   rising: {
+   *   totalInstalls: {
    *     labels: [...],
-   *     values: [...]
+   *     datasets: [...]
    *   },
-   *   popular: {
+   *   topGainers: {
    *     labels: [...],
-   *     values: [...]
+   *     datasets: [...]
    *   },
-   *   trend: {
+   *   newEntries: {
+   *     labels: [...],
+   *     datasets: [...]
+   *   },
+   *   codeEditors: {
    *     labels: [...],
    *     datasets: [...]
    *   }
@@ -554,89 +588,100 @@
 
   const HOMEBREW_DATA = {
 
-    rising: {
+    totalInstalls: {
       labels: [
-        "ripgrep",
-        "jq",
-        "fzf",
-        "fd",
-        "bat",
-        "neovim",
-        "htop"
+        "2026-08-08",
+        "2026-08-16",
+        "2026-08-23",
+        "2026-08-30",
+        "2026-09-06",
+        "2026-09-13",
+        "2026-09-20"
       ],
-      values: [
-        31,
-        24,
-        19,
-        15,
-        12,
-        9,
-        7
-      ]
-    },
-
-    popular: {
-      labels: [
-        "wget",
-        "git",
-        "python",
-        "node",
-        "jq",
-        "curl",
-        "ripgrep",
-        "ffmpeg",
-        "fzf",
-        "neovim"
-      ],
-      values: [
-        98400,
-        92100,
-        85600,
-        81300,
-        74200,
-        71100,
-        68900,
-        62400,
-        58100,
-        54700
-      ]
-    },
-
-    trend: {
-      labels: [
-        "Aug 13",
-        "Aug 16",
-        "Aug 19",
-        "Aug 22",
-        "Aug 25",
-        "Aug 28",
-        "Aug 31",
-        "Sep 3",
-        "Sep 6",
-        "Sep 9"
-      ],
-
       datasets: [
         {
-          label: "ripgrep",
-          data: [
-            42000, 43500, 44900, 47200, 49800,
-            52100, 54800, 58300, 63100, 68900
-          ]
+          label: "formula_install_on_request",
+          data: [8562029, 8519728, 8694268, 8741111, 8457669, 6832047, 5081833]
         },
         {
-          label: "fzf",
-          data: [
-            39000, 40100, 41500, 42900, 43800,
-            45100, 46900, 49200, 52700, 58100
-          ]
+          label: "cask_install",
+          data: [2271014, 2241769, 2274872, 2301217, 2240736, 1732036, 1226408]
+        }
+      ]
+    },
+
+    topGainers: {
+      labels: [
+        "verilator",
+        "tuist/tuist/tuist@4.206.0",
+        "icarus-verilog",
+        "mold",
+        "zulu@21",
+        "squid",
+        "diffutils",
+        "xclogparser",
+        "tomcat",
+        "gnu-sed"
+      ],
+      datasets: [
+        {
+          label: "Growth percentage (%)",
+          data: [92.25, 83.23, 53.05, 38.98, 38.64, 21.03, 15.6, 12.57, 12.08, 10.34]
+        }
+      ]
+    },
+
+    newEntries: {
+      labels: [
+        "patrickdappollonio/tap/kubectl-slice",
+        "rocq",
+        "tuist/tuist/tuist@4.200.5",
+        "codespell",
+        "temporalio/brew/tcld",
+        "ocaml",
+        "homebrew-app",
+        "svt-av1",
+        "modem-dev/tap/hunk",
+        "leiningen"
+      ],
+      datasets: [
+        {
+          label: "Installs",
+          data: [1798, 968, 951, 900, 789, 754, 747, 740, 656, 646]
+        }
+      ]
+    },
+
+    codeEditors: {
+      labels: [
+        "2026-08-08",
+        "2026-08-16",
+        "2026-08-23",
+        "2026-08-30",
+        "2026-09-06",
+        "2026-09-13",
+        "2026-09-20"
+      ],
+      datasets: [
+        {
+          label: "visual-studio-code",
+          data: [44636, 42485, 41566, 40417, 38040, 28320, 19393]
         },
         {
-          label: "neovim",
-          data: [
-            37000, 37800, 38900, 39600, 41100,
-            42300, 43700, 45600, 48900, 54700
-          ]
+          label: "zed",
+          data: [9596, 8885, 9084, 9056, 8789, 6696, 4572]
+        },
+        {
+          label: "cursor",
+          data: [8654, 8160, 8059, 7808, 7482, 5738, 3805]
+        },
+        {
+          label: "sublime-text",
+          data: [5923, 6042, 5979, 5907, 5367, 3789, 2536]
+        },
+        {
+          label: "coteditor",
+          data: [1586, 1481, 1482, 1499, 1476, 1105, 770]
         }
       ]
     }
@@ -713,7 +758,72 @@
 
   /*
    * ============================================================
-   * CHART 1 — RISING
+   * CHART 1 — TOTAL INSTALLS
+   * ============================================================
+   */
+
+  new Chart(
+    document.getElementById("totalInstallsChart"),
+    {
+      type: "line",
+
+      data: {
+        labels: HOMEBREW_DATA.totalInstalls.labels,
+
+        datasets: HOMEBREW_DATA.totalInstalls.datasets.map((dataset, index) => ({
+          ...dataset,
+
+          borderColor: [
+            "#4f7c45",
+            "#c48a38"
+          ][index],
+
+          backgroundColor: "transparent",
+          borderWidth: 2.5,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          tension: 0.35
+        }))
+      },
+
+      options: {
+        ...commonOptions,
+
+        plugins: {
+          ...commonOptions.plugins,
+
+          tooltip: {
+            ...commonOptions.plugins.tooltip,
+
+            callbacks: {
+              label: context =>
+                `  ${context.dataset.label}: ${context.raw.toLocaleString()} installs`
+            }
+          }
+        },
+
+        scales: {
+          ...commonOptions.scales,
+
+          y: {
+            ...commonOptions.scales.y,
+
+            ticks: {
+              callback: value =>
+                value >= 1000
+                  ? `${Math.round(value / 1000)}k`
+                  : value
+            }
+          }
+        }
+      }
+    }
+  );
+
+
+  /*
+   * ============================================================
+   * CHART 2 — TOP GAINERS
    * ============================================================
    */
 
@@ -723,12 +833,12 @@
       type: "bar",
 
       data: {
-        labels: HOMEBREW_DATA.rising.labels,
+        labels: HOMEBREW_DATA.topGainers.labels,
 
         datasets: [
           {
-            label: "Install growth",
-            data: HOMEBREW_DATA.rising.values,
+            label: HOMEBREW_DATA.topGainers.datasets[0].label,
+            data: HOMEBREW_DATA.topGainers.datasets[0].data,
 
             backgroundColor: "#4f7c45",
             borderRadius: 6,
@@ -740,6 +850,8 @@
 
       options: {
         ...commonOptions,
+
+        indexAxis: "y",
 
         plugins: {
           ...commonOptions.plugins,
@@ -759,9 +871,7 @@
         },
 
         scales: {
-          ...commonOptions.scales,
-
-          y: {
+          x: {
             ...commonOptions.scales.y,
 
             beginAtZero: true,
@@ -769,6 +879,10 @@
             ticks: {
               callback: value => `${value}%`
             }
+          },
+
+          y: {
+            ...commonOptions.scales.x
           }
         }
       }
@@ -778,22 +892,22 @@
 
   /*
    * ============================================================
-   * CHART 2 — MOST POPULAR
+   * CHART 3 — NEW ENTRIES
    * ============================================================
    */
 
   new Chart(
-    document.getElementById("popularChart"),
+    document.getElementById("newEntriesChart"),
     {
       type: "bar",
 
       data: {
-        labels: HOMEBREW_DATA.popular.labels,
+        labels: HOMEBREW_DATA.newEntries.labels,
 
         datasets: [
           {
-            label: "Installs",
-            data: HOMEBREW_DATA.popular.values,
+            label: HOMEBREW_DATA.newEntries.datasets[0].label,
+            data: HOMEBREW_DATA.newEntries.datasets[0].data,
 
             backgroundColor: "#31552e",
             borderRadius: 6,
@@ -850,35 +964,33 @@
 
   /*
    * ============================================================
-   * CHART 3 — TREND
+   * CHART 4 — CODE EDITORS
    * ============================================================
    */
 
   new Chart(
-    document.getElementById("trendChart"),
+    document.getElementById("codeEditorsChart"),
     {
       type: "line",
 
       data: {
-        labels: HOMEBREW_DATA.trend.labels,
+        labels: HOMEBREW_DATA.codeEditors.labels,
 
-        datasets: HOMEBREW_DATA.trend.datasets.map((dataset, index) => ({
+        datasets: HOMEBREW_DATA.codeEditors.datasets.map((dataset, index) => ({
           ...dataset,
 
           borderColor: [
             "#4f7c45",
             "#c48a38",
-            "#171914"
+            "#171914",
+            "#31552e",
+            "#8c6b2f"
           ][index],
 
           backgroundColor: "transparent",
-
           borderWidth: 2.5,
-
           pointRadius: 3,
-
           pointHoverRadius: 6,
-
           tension: 0.35
         }))
       },

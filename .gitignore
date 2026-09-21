@@ -3,3 +3,4 @@ dumps/
 .DS_Store
 brew_stats.db
 descriptions.json.zst
+__pycache__/
