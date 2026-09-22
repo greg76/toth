@@ -1,13 +1,13 @@
 # %% imports, constants, helper functions
 
+import functools
+import hashlib
 import json
-import re
-import sqlite3
-import subprocess
-import unicodedata
-from enum import Enum
+import pickle
+import time
+import urllib.request
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -16,236 +16,74 @@ from compression import zstd
 from matplotlib.ticker import EngFormatter
 from pandas.core.frame import DataFrame
 
-DB_PATH = "brew_stats.db"
-conn = sqlite3.connect(DB_PATH)
-QUERY = """
-WITH cleaned AS (
-    SELECT
-        counts.date,
-        counts.count,
-        substr(names.name, 1, instr(names.name || '@', '@') - 1) AS no_at
-    FROM counts
-    JOIN names ON names.name_id = counts.name_id
-    WHERE names.name {}
-),
-normalized AS (
-    SELECT
-        date,
-        count,
-        replace(no_at, rtrim(no_at, replace(no_at, '/', '')), '') AS name
-    FROM cleaned
-),
-merged AS (
-    SELECT date, name, SUM(count) AS count
-    FROM normalized
-    GROUP BY date, name
-),
-top_names AS (
-    SELECT name
-    FROM merged
-    WHERE date = (SELECT MAX(date) FROM counts)
-    ORDER BY count DESC, name
-    LIMIT 5
-)
-SELECT date, name, count
-FROM merged
-WHERE name IN (SELECT name FROM top_names)
-ORDER BY date, name
-"""
+from charts import QUERY, brew_search, conn
 
 
-class ChartType(str, Enum):
-    """Chart.js types whose DataFrame layout this notebook supports."""
+def disk_cache(ttl=3600 * 24, cache_dir="/tmp/toth-cache"):
+    """Decorator that caches function return values on disk using pickle serialization.
 
-    BAR = "bar"
-    LINE = "line"
+    Hashes positional and keyword arguments using SHA-256 to generate cache keys.
+    Cached values are saved as pickle files in `cache_dir` and remain valid for `ttl` seconds.
 
+    Args:
+        ttl (int): Time-to-live for cached entries in seconds. Defaults to 24 hours.
+        cache_dir (str | Path): Directory where cache files are stored. Defaults to ".cache".
 
-def chartjs_record(
-    df: DataFrame,
-    *,
-    title: str,
-    chart_type: ChartType,
-    value_column: str = "count",
-    category_column: str = "name",
-    date_column: str = "date",
-    value_label: str | None = None,
-    description: str | None = None,
-    options: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Convert one analysis DataFrame into a self-contained Chart.js record.
-
-    A line chart expects long-form date, category, and value columns. It emits one
-    dataset per category and uses ISO-8601 date labels. A missing category/date
-    combination becomes ``None`` so ``json.dumps`` writes ``null``.
-
-    A bar chart expects one category/value row per bar. The value may be an
-    absolute count or a percentage; its meaning is supplied by ``value_label``.
+    Returns:
+        Callable: A decorator function that wraps the target function with caching logic.
     """
-    chart_type = ChartType(chart_type)
-    chart_id = _slugify_title(title)
+    cache_dir = Path(cache_dir)
+    cache_dir.mkdir(exist_ok=True)
 
-    if chart_type is ChartType.LINE:
-        data = _time_series_chart_data(
-            df,
-            date_column=date_column,
-            category_column=category_column,
-            value_column=value_column,
-        )
-    else:
-        data = _category_values_chart_data(
-            df,
-            category_column=category_column,
-            value_column=value_column,
-            value_label=value_label,
-        )
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            key = hashlib.sha256(repr((args, kwargs)).encode()).hexdigest()
+            path = cache_dir / key
 
-    record: dict[str, Any] = {
-        "id": chart_id,
-        "title": title,
-        "config": {
-            "type": chart_type.value,
-            "data": data,
-            "options": dict(options or {}),
-        },
-    }
-    if description is not None:
-        record["description"] = description
+            if path.exists():
+                age = time.time() - path.stat().st_mtime
+                if age < ttl:
+                    return pickle.loads(path.read_bytes())
 
-    return record
+            result = func(*args, **kwargs)
+            path.write_bytes(pickle.dumps(result))
+            return result
 
+        return wrapper
 
-def _time_series_chart_data(
-    df: DataFrame,
-    *,
-    date_column: str,
-    category_column: str,
-    value_column: str,
-) -> dict[str, Any]:
-    columns = [date_column, category_column, value_column]
-    _require_columns(df, columns)
+    return decorator
 
-    data = df.loc[:, columns].copy()
-    _require_non_null(data, [date_column, category_column, value_column])
-    data[date_column] = pd.to_datetime(data[date_column].astype(str), errors="raise")
-    _require_numeric(data, value_column)
-
-    duplicate_rows = data.duplicated([date_column, category_column])
-    if duplicate_rows.any():
-        raise ValueError("Time-series data must have at most one value per date and category.")
-
-    labels = sorted(data[date_column].unique())
-    label_strings = [label.strftime("%Y-%m-%d") for label in labels]
-    category_order = data[category_column].drop_duplicates().tolist()
-    latest_values = (
-        data.loc[data[date_column] == labels[-1], [category_column, value_column]]
-        .set_index(category_column)[value_column]
-    )
-    categories = latest_values.sort_values(ascending=False, kind="stable").index.tolist()
-    categories.extend(category for category in category_order if category not in categories)
-    datasets = []
-
-    for category in categories:
-        category_data = data.loc[data[category_column] == category].set_index(date_column)
-        datasets.append(
-            {
-                "label": str(category),
-                "data": [
-                    _json_value(category_data.at[label, value_column])
-                    if label in category_data.index
-                    else None
-                    for label in labels
-                ],
-            }
-        )
-
-    return {"labels": label_strings, "datasets": datasets}
-
-
-def _category_values_chart_data(
-    df: DataFrame,
-    *,
-    category_column: str,
-    value_column: str,
-    value_label: str | None,
-) -> dict[str, Any]:
-    columns = [category_column, value_column]
-    _require_columns(df, columns)
-
-    data = df.loc[:, columns].copy()
-    _require_non_null(data, columns)
-    _require_numeric(data, value_column)
-
-    if data[category_column].duplicated().any():
-        raise ValueError("Category/value data must have at most one value per category.")
-
-    return {
-        "labels": [str(category) for category in data[category_column]],
-        "datasets": [
-            {
-                "label": value_label or value_column,
-                "data": [_json_value(value) for value in data[value_column]],
-            }
-        ],
+@disk_cache()
+def get_descriptions() -> dict[str, Any]:
+    URLS = {
+        "formulae": "https://formulae.brew.sh/api/formula.json",
+        "casks": "https://formulae.brew.sh/api/cask.json",
     }
 
+    descriptions = {}
 
-def _slugify_title(title: str) -> str:
-    if not title:
-        raise ValueError("title must not be empty.")
+    for package_type, url in URLS.items():
+        print(f"Downloading {package_type}...")
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "Mozilla/5.0 (Python Script)"}
+        )
 
-    normalized = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()
-    slug = re.sub(r"[^a-z0-9]+", "-", normalized.lower()).strip("-")
-    if not slug:
-        raise ValueError("title must contain at least one letter or number.")
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode("utf-8"))
 
-    return slug
+            for item in data:
+                raw_name = item.get("token") or item.get("name")
+                desc = item.get("desc")
 
+                if isinstance(raw_name, list) and raw_name:
+                    name = raw_name[0]
+                else:
+                    name = raw_name
 
-def _require_columns(df: DataFrame, columns: list[str]) -> None:
-    missing = [column for column in columns if column not in df.columns]
-    if missing:
-        raise ValueError(f"DataFrame is missing required columns: {', '.join(missing)}")
-
-
-def _require_non_null(df: DataFrame, columns: list[str]) -> None:
-    empty_columns = [column for column in columns if df[column].isna().any()]
-    if empty_columns:
-        raise ValueError(f"DataFrame has null values in: {', '.join(empty_columns)}")
-
-
-def _require_numeric(df: DataFrame, column: str) -> None:
-    try:
-        df[column] = pd.to_numeric(df[column], errors="raise")
-    except (TypeError, ValueError) as error:
-        raise ValueError(f"{column} must contain numeric values.") from error
-
-    if df[column].isin([float("inf"), float("-inf")]).any():
-        raise ValueError(f"{column} must not contain infinite values.")
-
-
-def _json_value(value: Any) -> int | float:
-    return value.item() if hasattr(value, "item") else value
-
-
-def brew_search(desc: str) -> list[str | None]:
-    command = ["brew", "search", "--desc", desc.strip()]
-
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
-    except subprocess.CalledProcessError as e:
-        # Triggered if the command returns a non-zero exit status (e.g., brew fails)
-        print(f"Command failed with exit code {e.returncode}")
-        print(f"Error output:\n{e.stderr}")
-        return []
-    except FileNotFoundError:
-        # Triggered if 'brew' is not installed or not in the system PATH
-        print("Error: The 'brew' command was not found.")
-        return []
-
-    return [
-        line.partition(":")[0] for line in result.stdout.splitlines() if ":" in line
-    ]
+                if name and desc:
+                    descriptions[name] = desc
+    return descriptions
 
 
 def top_trend(df: DataFrame, title: str | None = None) -> None:
@@ -545,3 +383,186 @@ top_trend(df, "compression packages")
 
 df = pd.read_sql_query(QUERY.format("LIKE 'font-%'"), conn)
 top_trend(df, "fonts")
+
+# %% load libraries for  clustering descriptions
+
+import hdbscan
+from IPython.display import display
+from sentence_transformers import SentenceTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_distances
+
+# %% load and enrich top brew packages with their descriptions
+
+TOP_LIMIT = 500
+
+descriptions = get_descriptions()
+
+df = pd.read_sql_query(
+    f"""
+    SELECT names.name, count
+    FROM counts
+    JOIN names ON names.name_id = counts.name_id
+    WHERE counts.date = (SELECT MAX(date) FROM counts)
+    ORDER BY counts.count DESC
+    LIMIT {TOP_LIMIT};
+    """,
+    conn,
+)
+
+df["desc"] = df["name"].map(descriptions)
+
+display(df)
+
+# %% sentence transformer based clustering
+
+# 1. Setup & Embeddings
+
+model = SentenceTransformer("all-MiniLM-L6-v2")
+df["desc"] = df["desc"].fillna("")
+embeddings = model.encode(df["desc"].tolist())
+
+# 2. HDBSCAN Clustering via Precomputed Cosine Distance
+
+distance_matrix = cosine_distances(embeddings).astype("float64")
+clusterer = hdbscan.HDBSCAN(
+    min_cluster_size=2, metric="precomputed", cluster_selection_method="eom"
+)
+df["cluster"] = clusterer.fit_predict(distance_matrix)
+
+# 3. Function to Extract Top Keywords Per Cluster
+
+
+def get_cluster_keywords(descriptions, top_n=3):
+    """Extracts top TF-IDF terms to summarize a group of text descriptions."""
+
+    if not descriptions or all(d == "" for d in descriptions):
+        return "Uncategorized"
+
+    vec = TfidfVectorizer(stop_words="english", max_features=10)
+
+    try:
+        tfidf_matrix = vec.fit_transform(descriptions)
+        # Sum TF-IDF scores across all docs in cluster
+        scores = tfidf_matrix.sum(axis=0).A1
+        words = vec.get_feature_names_out()
+        top_indices = scores.argsort()[-top_n:][::-1]
+        return ", ".join([words[i] for i in top_indices])
+    except ValueError:
+        # Fallback if text is too short or contains only stop words
+        return "General"
+
+
+# 4. Generate Summary DataFrame (Ordered by total download counts)
+
+cluster_summary = []
+
+for cluster_id, group in df.groupby("cluster"):
+    # Sort individual packages inside the cluster by count descending
+    sorted_group = group.sort_values(by="count", ascending=False)
+
+    # Filter out empty descriptions for keyword extraction
+    valid_descs = [d for d in sorted_group["desc"].tolist() if d.strip()]
+
+    if cluster_id == -1:
+        label = "Noise / Outliers (Unclustered)"
+    else:
+        keywords = get_cluster_keywords(valid_descs, top_n=3)
+        label = f"Cluster {cluster_id}: [{keywords}]"
+
+    cluster_summary.append(
+        {
+            "cluster_id": cluster_id,
+            "cluster_description": label,
+            "total_downloads": sorted_group["count"].sum(),
+            "item_count": len(sorted_group),
+            "names": sorted_group["name"].tolist(),
+        }
+    )
+
+summary_df = pd.DataFrame(cluster_summary)
+
+# Separate valid clusters from noise (-1) and rank by total downloads
+outliers = summary_df[summary_df["cluster_id"] == -1]
+valid_clusters = summary_df[summary_df["cluster_id"] != -1].sort_values(
+    by="total_downloads", ascending=False
+)
+
+summary_df = pd.concat([valid_clusters, outliers], ignore_index=True)
+
+# Display results nicely
+display(summary_df)
+# %% visualize how close the clusters are to each other
+
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.manifold import MDS
+
+# 1. Compute a centroid embedding per cluster (skip noise, id == -1)
+centroids = {}
+for cluster_id, group in df[df["cluster"] != -1].groupby("cluster"):
+    centroids[cluster_id] = embeddings[group.index].mean(axis=0)
+
+cluster_ids = sorted(centroids)
+
+if len(cluster_ids) < 2:
+    print("Need at least 2 non-noise clusters to compare.")
+else:
+    centroid_matrix = np.vstack([centroids[c] for c in cluster_ids])
+    centroid_distances = cosine_distances(centroid_matrix)
+
+    # Human-readable labels: reuse the TF-IDF keywords from summary_df
+    label_map = dict(zip(summary_df["cluster_id"], summary_df["cluster_description"]))
+    labels = []
+    for cid in cluster_ids:
+        kw = label_map[cid].split("[")[-1].rstrip("]")  # extract keyword part
+        labels.append(f"C{cid}: {kw[:40]}")
+
+    n = len(labels)
+
+    # 2D "map" of the clusters via MDS on the centroid distance matrix
+    mds = MDS(
+        n_components=2,
+        metric="precomputed",
+        init="classical_mds",
+        random_state=42,
+    )
+    coords = mds.fit_transform(centroid_distances)
+
+    short_labels = [f"C{cid}" for cid in cluster_ids]
+
+    cmap = plt.get_cmap("tab20")
+    colors = [cmap(i % cmap.N) for i in range(n)]
+
+    # Scale figure height with the legend length so the scatter plot
+    # gets the same vertical space as the legend
+    fig_height = max(6, 0.25 * n)
+
+    # Two-column layout: scatter on the left, legend in its own (blank)
+    # axes on the right, both spanning the full figure height
+    fig, (ax, lax) = plt.subplots(
+        1,
+        2,
+        figsize=(9, fig_height),
+        gridspec_kw={"width_ratios": [2.2, 1]},
+    )
+
+    ax.scatter(coords[:, 0], coords[:, 1], s=80, color=colors)
+    for i, short in enumerate(short_labels):
+        ax.annotate(
+            short, coords[i], textcoords="offset points", xytext=(6, 4), fontsize=9
+        )
+
+    legend_handles = [
+        plt.Line2D([], [], marker="o", linestyle="", color=colors[i], markersize=8)
+        for i in range(n)
+    ]
+    lax.legend(legend_handles, labels, loc="upper left", fontsize=9, title="Clusters")
+    lax.axis("off")
+
+    ax.set_title("Cluster map (MDS of centroid distances; closer = more similar)")
+    ax.set_xlabel("MDS 1")
+    ax.set_ylabel("MDS 2")
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    plt.show()

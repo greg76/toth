@@ -1,4 +1,9 @@
-sentence-transformers
-scikit-learn
+numpy
+ipykernel
+ipywidgets
 pandas
+pandas-stubs
+seaborn
 hdbscan
+scikit-learn
+sentence-transformers
