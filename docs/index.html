@@ -17,9 +17,7 @@
       --hop: #4f7c45;
       --hop-dark: #31552e;
       --hop-light: #dce7d7;
-      --amber: #c48a38;
       --border: #dedbd0;
-      --white: #ffffff;
     }
 
     * {
@@ -45,85 +43,23 @@
       line-height: 1.5;
     }
 
-    /* --------------------------------
-       Layout
-    -------------------------------- */
-
     .container {
       width: min(1120px, calc(100% - 40px));
       margin: 0 auto;
     }
 
-    /* --------------------------------
-       Header
-    -------------------------------- */
-
     header {
-      padding: 28px 0;
-    }
-
-    .nav {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 100px;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: 800;
-      letter-spacing: -0.04em;
-      font-size: 18px;
-    }
-
-    .hop-mark {
-      width: 30px;
-      height: 30px;
-      display: grid;
-      place-items: center;
-      border-radius: 50%;
-      background: var(--hop);
-      color: white;
-      font-size: 15px;
-    }
-
-    .status {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .status-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--hop);
-      box-shadow: 0 0 0 4px var(--hop-light);
-    }
-
-    .hero h1
-    .hero-copy {
-      max-width: 850px;
+      padding: 28px 0 70px;
     }
 
     .eyebrow {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 8px;
-      margin-bottom: 20px;
-      margin-left: auto;
       width: fit-content;
-
+      margin-left: auto;
+      margin-bottom: 20px;
       padding: 6px 10px;
       background: var(--hop-light);
       color: var(--hop-dark);
       border-radius: 999px;
-
       font-size: 12px;
       font-weight: 750;
       letter-spacing: 0.04em;
@@ -150,149 +86,76 @@
       letter-spacing: -0.02em;
     }
 
-    .hero-meta {
-      margin-top: 35px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-
-    .pill {
-      padding: 7px 11px;
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      color: var(--muted);
-      font-size: 12px;
-      background: rgba(255,255,255,0.35);
-    }
-
-    /* --------------------------------
-       Main
-    -------------------------------- */
-
     main {
-      padding: 40px 0;
+      padding: 0 0 70px;
     }
 
-    .section-heading {
-      display: flex;
-      justify-content: space-between;
-      align-items: end;
-      gap: 30px;
-      margin-bottom: 25px;
+    .chart-list {
+      display: grid;
+      gap: 28px;
     }
-
-    .section-heading h2 {
-      margin: 0;
-      font-size: 28px;
-      letter-spacing: -0.04em;
-    }
-
-    .section-heading p {
-      margin: 5px 0 0;
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    .section-number {
-      font-family: Georgia, serif;
-      font-size: 70px;
-      line-height: 0.7;
-      color: var(--border);
-    }
-
-    /* --------------------------------
-       Cards
-    -------------------------------- */
 
     .chart-card {
+      display: grid;
+      grid-template-columns: minmax(190px, 0.32fr) minmax(0, 1fr);
+      align-items: center;
+      gap: clamp(25px, 5vw, 64px);
+      min-height: 410px;
+      margin: 0;
+      padding: 28px;
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 18px;
-      padding: 25px;
-      margin-bottom: 55px;
       box-shadow:
-        0 1px 2px rgba(0,0,0,0.02),
-        0 15px 40px rgba(0,0,0,0.025);
+        0 1px 2px rgba(0, 0, 0, 0.02),
+        0 15px 40px rgba(0, 0, 0, 0.025);
     }
 
-    .chart-card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: start;
-      gap: 20px;
-      margin-bottom: 25px;
+    .chart-card-copy {
+      align-self: start;
+      padding-top: 5px;
     }
 
-    .chart-card h3 {
+    .section-number {
+      margin-bottom: 22px;
+      color: var(--border);
+      font-family: Georgia, serif;
+      font-size: 70px;
+      line-height: 0.7;
+    }
+
+    .chart-card h2 {
       margin: 0;
-      font-size: 19px;
-      letter-spacing: -0.025em;
+      font-size: clamp(22px, 3vw, 32px);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
     }
 
     .chart-card .description {
-      margin: 4px 0 0;
+      margin: 12px 0 0;
       color: var(--muted);
-      font-size: 13px;
-    }
-
-    .chart-badge {
-      flex-shrink: 0;
-      padding: 6px 9px;
-      border-radius: 7px;
-      background: var(--hop-light);
-      color: var(--hop-dark);
-      font-size: 11px;
-      font-weight: 700;
+      font-size: 14px;
     }
 
     .chart-wrapper {
       position: relative;
       height: 360px;
+      min-width: 0;
     }
 
-    /* --------------------------------
-       Stats
-    -------------------------------- */
-
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 15px;
-      margin-bottom: 80px;
-    }
-
-    .stat {
-      padding: 25px;
-      border: 1px solid var(--border);
-      border-radius: 15px;
-      background: rgba(255,255,255,0.28);
-    }
-
-    .stat-label {
+    .loading,
+    .error {
+      margin: 0;
+      padding: 40px;
       color: var(--muted);
-      font-size: 12px;
-      font-weight: 650;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+      text-align: center;
+      border: 1px dashed var(--border);
+      border-radius: 18px;
     }
 
-    .stat-value {
-      margin-top: 5px;
-      font-size: 34px;
-      font-weight: 800;
-      letter-spacing: -0.05em;
-    }
-
-    .stat-change {
+    .error {
       color: var(--hop-dark);
-      font-size: 12px;
-      font-weight: 650;
     }
-
-    /* --------------------------------
-       Footer
-    -------------------------------- */
 
     footer {
       padding: 50px 0;
@@ -311,46 +174,34 @@
       color: var(--ink);
     }
 
-    /* --------------------------------
-       Responsive
-    -------------------------------- */
-
-    @media (max-width: 700px) {
+    @media (max-width: 760px) {
       header {
-        padding-bottom: 70px;
-      }
-
-      .nav {
-        margin-bottom: 70px;
-      }
-
-      .status {
-        display: none;
+        padding-bottom: 55px;
       }
 
       .container {
         width: min(100% - 28px, 1120px);
       }
 
-      main {
-        padding: 55px 0;
-      }
-
-      .stats {
-        grid-template-columns: 1fr;
-      }
-
       .chart-card {
-        padding: 17px;
+        grid-template-columns: 1fr;
+        gap: 28px;
+        min-height: 0;
+        padding: 20px;
         border-radius: 14px;
+      }
+
+      .chart-card-copy {
+        padding-top: 0;
+      }
+
+      .section-number {
+        margin-bottom: 16px;
+        font-size: 52px;
       }
 
       .chart-wrapper {
         height: 300px;
-      }
-
-      .section-number {
-        display: none;
       }
 
       .footer-inner {
@@ -361,15 +212,9 @@
 </head>
 
 <body>
-
-<header>
-  <div class="container">
-
-    <div class="hero">
-
-      <div class="eyebrow">
-        🍺 Homebrew analytics
-      </div>
+  <header>
+    <div class="container">
+      <div class="eyebrow">🍺 Homebrew analytics</div>
 
       <h1>
         Top of<br>The <span>Hops.</span>
@@ -379,678 +224,334 @@
         Trending Homebrew packages, scraped and served weekly.
       </p>
     </div>
-  </div>
-</header>
+  </header>
 
-
-<main>
-  <div class="container">
-
-    <!-- Quick stats -->
-
-    <!--
-    <div class="stats">
-
-      <div class="stat">
-        <div class="stat-label">Packages tracked</div>
-        <div class="stat-value">1,284</div>
-        <div class="stat-change">↑ 8.4% this month</div>
-      </div>
-
-      <div class="stat">
-        <div class="stat-label">Biggest climber</div>
-        <div class="stat-value">ripgrep</div>
-        <div class="stat-change">↑ 31% installs</div>
-      </div>
-
-      <div class="stat">
-        <div class="stat-label">Current favourite</div>
-        <div class="stat-value">wget</div>
-        <div class="stat-change">Still refusing to die</div>
-      </div>
-
+  <main>
+    <div class="container">
+      <section id="chartList" class="chart-list" aria-label="Homebrew trend charts">
+        <p class="loading">Pouring the latest charts…</p>
+      </section>
     </div>
+  </main>
 
-    -->
-
-    <!-- Chart 1 -->
-
-    <div class="section-heading">
-      <div>
-        <div class="section-number">01</div>
-        <h2>What’s pouring?</h2>
-        <p>Total installs across Homebrew categories over time.</p>
-      </div>
-    </div>
-
-    <div class="chart-card">
-
-      <div class="chart-card-header">
+  <footer>
+    <div class="container">
+      <div class="footer-inner">
         <div>
-          <h3>Total installs by category</h3>
-          <p class="description">
-            Weekly total installs from the latest Homebrew snapshots.
-          </p>
+          <strong>Top of The Hops</strong><br>
+          Homebrew package trends, minus the hangover.
         </div>
 
-        <div class="chart-badge">WEEKLY TOTALS</div>
-      </div>
-
-      <div class="chart-wrapper">
-        <canvas id="totalInstallsChart"></canvas>
-      </div>
-
-    </div>
-
-
-    <!-- Chart 2 -->
-
-    <div class="section-heading">
-      <div>
-        <div class="section-number">02</div>
-        <h2>What’s rising?</h2>
-        <p>The packages currently gaining the most momentum.</p>
-      </div>
-    </div>
-
-    <div class="chart-card">
-
-      <div class="chart-card-header">
         <div>
-          <h3>The movers &amp; shakers</h3>
-          <p class="description">
-            Percentage change in installs over the latest week.
-          </p>
+          Last tapped: <span id="lastUpdated"></span><br>
+          No lagers were harmed in the making of these charts.
         </div>
-
-        <div class="chart-badge">WEEK-OVER-WEEK</div>
-      </div>
-
-      <div class="chart-wrapper">
-        <canvas id="risingChart"></canvas>
-      </div>
-
-    </div>
-
-
-    <!-- Chart 3 -->
-
-    <div class="section-heading">
-      <div>
-        <div class="section-number">03</div>
-        <h2>What’s new?</h2>
-        <p>The newest packages making an entrance.</p>
       </div>
     </div>
+  </footer>
 
-    <div class="chart-card">
+  <script>
+    const CHARTS_URL = "charts.json";
+    const THOUSAND = 1_000;
+    const MILLION = 1_000_000;
+    const MAX_CATEGORY_LABEL_LENGTH = 24;
+    const COLORS = [
+      "#4f7c45",
+      "#c48a38",
+      "#171914",
+      "#31552e",
+      "#8c6b2f"
+    ];
 
-      <div class="chart-card-header">
-        <div>
-          <h3>Fresh on tap</h3>
-          <p class="description">
-            The highest-install packages with no previous recorded event.
-          </p>
-        </div>
+    Chart.defaults.font.family =
+      'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    Chart.defaults.color = "#6d7066";
 
-        <div class="chart-badge">TOP 10</div>
-      </div>
-
-      <div class="chart-wrapper">
-        <canvas id="newEntriesChart"></canvas>
-      </div>
-
-    </div>
-
-
-    <!-- Chart 4 -->
-
-    <div class="section-heading">
-      <div>
-        <div class="section-number">04</div>
-        <h2>The long pour.</h2>
-        <p>Because sometimes you need to know where things are headed.</p>
-      </div>
-    </div>
-
-    <div class="chart-card">
-
-      <div class="chart-card-header">
-        <div>
-          <h3>Code editor momentum</h3>
-          <p class="description">
-            Installation trends for the top code editors in the latest scrape.
-          </p>
-        </div>
-
-        <div class="chart-badge">WEEKLY TRENDS</div>
-      </div>
-
-      <div class="chart-wrapper">
-        <canvas id="codeEditorsChart"></canvas>
-      </div>
-
-    </div>
-
-  </div>
-</main>
-
-
-<footer>
-  <div class="container">
-    <div class="footer-inner">
-      <div>
-        <strong>Top of The Hops</strong><br>
-        Homebrew package trends, minus the hangover.
-      </div>
-
-      <div>
-        Last tapped: <span id="lastUpdated"></span><br>
-        No lagers were harmed in the making of these charts.
-      </div>
-    </div>
-  </div>
-</footer>
-
-
-<script>
-
-  /*
-   * ============================================================
-   * DATA
-   * ============================================================
-   *
-   * Your scraper can replace this object.
-   *
-   * For example:
-   *
-   * window.HOMEBREW_DATA = {
-   *   totalInstalls: {
-   *     labels: [...],
-   *     datasets: [...]
-   *   },
-   *   topGainers: {
-   *     labels: [...],
-   *     datasets: [...]
-   *   },
-   *   newEntries: {
-   *     labels: [...],
-   *     datasets: [...]
-   *   },
-   *   codeEditors: {
-   *     labels: [...],
-   *     datasets: [...]
-   *   }
-   * }
-   *
-   * ============================================================
-   */
-
-  const HOMEBREW_DATA = {
-
-    totalInstalls: {
-      labels: [
-        "2026-08-08",
-        "2026-08-16",
-        "2026-08-23",
-        "2026-08-30",
-        "2026-09-06",
-        "2026-09-13",
-        "2026-09-20"
-      ],
-      datasets: [
-        {
-          label: "formula_install_on_request",
-          data: [8562029, 8519728, 8694268, 8741111, 8457669, 6832047, 5081833]
-        },
-        {
-          label: "cask_install",
-          data: [2271014, 2241769, 2274872, 2301217, 2240736, 1732036, 1226408]
-        }
-      ]
-    },
-
-    topGainers: {
-      labels: [
-        "verilator",
-        "tuist/tuist/tuist@4.206.0",
-        "icarus-verilog",
-        "mold",
-        "zulu@21",
-        "squid",
-        "diffutils",
-        "xclogparser",
-        "tomcat",
-        "gnu-sed"
-      ],
-      datasets: [
-        {
-          label: "Growth percentage (%)",
-          data: [92.25, 83.23, 53.05, 38.98, 38.64, 21.03, 15.6, 12.57, 12.08, 10.34]
-        }
-      ]
-    },
-
-    newEntries: {
-      labels: [
-        "patrickdappollonio/tap/kubectl-slice",
-        "rocq",
-        "tuist/tuist/tuist@4.200.5",
-        "codespell",
-        "temporalio/brew/tcld",
-        "ocaml",
-        "homebrew-app",
-        "svt-av1",
-        "modem-dev/tap/hunk",
-        "leiningen"
-      ],
-      datasets: [
-        {
-          label: "Installs",
-          data: [1798, 968, 951, 900, 789, 754, 747, 740, 656, 646]
-        }
-      ]
-    },
-
-    codeEditors: {
-      labels: [
-        "2026-08-08",
-        "2026-08-16",
-        "2026-08-23",
-        "2026-08-30",
-        "2026-09-06",
-        "2026-09-13",
-        "2026-09-20"
-      ],
-      datasets: [
-        {
-          label: "visual-studio-code",
-          data: [44636, 42485, 41566, 40417, 38040, 28320, 19393]
-        },
-        {
-          label: "zed",
-          data: [9596, 8885, 9084, 9056, 8789, 6696, 4572]
-        },
-        {
-          label: "cursor",
-          data: [8654, 8160, 8059, 7808, 7482, 5738, 3805]
-        },
-        {
-          label: "sublime-text",
-          data: [5923, 6042, 5979, 5907, 5367, 3789, 2536]
-        },
-        {
-          label: "coteditor",
-          data: [1586, 1481, 1482, 1499, 1476, 1105, 770]
-        }
-      ]
-    }
-  };
-
-
-  /*
-   * ============================================================
-   * CHART DEFAULTS
-   * ============================================================
-   */
-
-  Chart.defaults.font.family =
-    'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-
-  Chart.defaults.color = "#6d7066";
-
-  const gridColor = "#e7e4da";
-
-  const commonOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-
-    plugins: {
-      legend: {
-        labels: {
-          usePointStyle: true,
-          pointStyle: "circle",
-          padding: 20
-        }
-      },
-
-      tooltip: {
-        backgroundColor: "#171914",
-        titleColor: "#ffffff",
-        bodyColor: "#ffffff",
-        padding: 12,
-        cornerRadius: 8,
-        displayColors: true
-      }
-    },
-
-    scales: {
-      x: {
-        grid: {
-          display: false
-        },
-
-        border: {
-          display: false
-        },
-
-        ticks: {
-          padding: 8
-        }
-      },
-
-      y: {
-        grid: {
-          color: gridColor
-        },
-
-        border: {
-          display: false
-        },
-
-        ticks: {
-          padding: 8
-        }
-      }
-    }
-  };
-
-
-  /*
-   * ============================================================
-   * CHART 1 — TOTAL INSTALLS
-   * ============================================================
-   */
-
-  new Chart(
-    document.getElementById("totalInstallsChart"),
-    {
-      type: "line",
-
-      data: {
-        labels: HOMEBREW_DATA.totalInstalls.labels,
-
-        datasets: HOMEBREW_DATA.totalInstalls.datasets.map((dataset, index) => ({
-          ...dataset,
-
-          borderColor: [
-            "#4f7c45",
-            "#c48a38"
-          ][index],
-
-          backgroundColor: "transparent",
-          borderWidth: 2.5,
-          pointRadius: 3,
-          pointHoverRadius: 6,
-          tension: 0.35
-        }))
-      },
-
-      options: {
-        ...commonOptions,
-
-        plugins: {
-          ...commonOptions.plugins,
-
-          tooltip: {
-            ...commonOptions.plugins.tooltip,
-
-            callbacks: {
-              label: context =>
-                `  ${context.dataset.label}: ${context.raw.toLocaleString()} installs`
-            }
+    const commonOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          labels: {
+            usePointStyle: true,
+            pointStyle: "circle",
+            padding: 20
           }
         },
-
-        scales: {
-          ...commonOptions.scales,
-
-          y: {
-            ...commonOptions.scales.y,
-
-            ticks: {
-              callback: value =>
-                value >= 1000
-                  ? `${Math.round(value / 1000)}k`
-                  : value
-            }
-          }
+        tooltip: {
+          backgroundColor: "#171914",
+          titleColor: "#ffffff",
+          bodyColor: "#ffffff",
+          padding: 12,
+          cornerRadius: 8,
+          displayColors: true
         }
-      }
-    }
-  );
-
-
-  /*
-   * ============================================================
-   * CHART 2 — TOP GAINERS
-   * ============================================================
-   */
-
-  new Chart(
-    document.getElementById("risingChart"),
-    {
-      type: "bar",
-
-      data: {
-        labels: HOMEBREW_DATA.topGainers.labels,
-
-        datasets: [
-          {
-            label: HOMEBREW_DATA.topGainers.datasets[0].label,
-            data: HOMEBREW_DATA.topGainers.datasets[0].data,
-
-            backgroundColor: "#4f7c45",
-            borderRadius: 6,
-
-            barThickness: 28
-          }
-        ]
       },
-
-      options: {
-        ...commonOptions,
-
-        indexAxis: "y",
-
-        plugins: {
-          ...commonOptions.plugins,
-
-          legend: {
+      scales: {
+        x: {
+          grid: {
             display: false
           },
-
-          tooltip: {
-            ...commonOptions.plugins.tooltip,
-
-            callbacks: {
-              label: context =>
-                `  +${context.raw}%`
-            }
-          }
-        },
-
-        scales: {
-          x: {
-            ...commonOptions.scales.y,
-
-            beginAtZero: true,
-
-            ticks: {
-              callback: value => `${value}%`
-            }
-          },
-
-          y: {
-            ...commonOptions.scales.x
-          }
-        }
-      }
-    }
-  );
-
-
-  /*
-   * ============================================================
-   * CHART 3 — NEW ENTRIES
-   * ============================================================
-   */
-
-  new Chart(
-    document.getElementById("newEntriesChart"),
-    {
-      type: "bar",
-
-      data: {
-        labels: HOMEBREW_DATA.newEntries.labels,
-
-        datasets: [
-          {
-            label: HOMEBREW_DATA.newEntries.datasets[0].label,
-            data: HOMEBREW_DATA.newEntries.datasets[0].data,
-
-            backgroundColor: "#31552e",
-            borderRadius: 6,
-
-            barThickness: 24
-          }
-        ]
-      },
-
-      options: {
-        ...commonOptions,
-
-        indexAxis: "y",
-
-        plugins: {
-          ...commonOptions.plugins,
-
-          legend: {
+          border: {
             display: false
           },
-
-          tooltip: {
-            ...commonOptions.plugins.tooltip,
-
-            callbacks: {
-              label: context =>
-                `  ${context.raw.toLocaleString()} installs`
-            }
+          ticks: {
+            padding: 8
           }
         },
-
-        scales: {
-          x: {
-            ...commonOptions.scales.y,
-
-            beginAtZero: true,
-
-            ticks: {
-              callback: value =>
-                value >= 1000
-                  ? `${Math.round(value / 1000)}k`
-                  : value
-            }
+        y: {
+          grid: {
+            color: "#e7e4da"
           },
-
-          y: {
-            ...commonOptions.scales.x
+          border: {
+            display: false
+          },
+          ticks: {
+            padding: 8
           }
         }
       }
+    };
+
+    function formatNumber(value) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) {
+        return value;
+      }
+
+      if (Math.abs(number) >= MILLION) {
+        return `${(number / MILLION).toFixed(1).replace(/\.0$/, "")}m`;
+      }
+
+      if (Math.abs(number) >= THOUSAND) {
+        return `${(number / THOUSAND).toFixed(1).replace(/\.0$/, "")}k`;
+      }
+
+      return number.toLocaleString();
     }
-  );
 
+    function shortenCategoryLabel(value) {
+      const label = String(value);
+      if (label.length <= MAX_CATEGORY_LABEL_LENGTH) {
+        return label;
+      }
 
-  /*
-   * ============================================================
-   * CHART 4 — CODE EDITORS
-   * ============================================================
-   */
+      return `${label.slice(0, MAX_CATEGORY_LABEL_LENGTH - 1)}…`;
+    }
 
-  new Chart(
-    document.getElementById("codeEditorsChart"),
-    {
-      type: "line",
+    function mergeOptions(chart) {
+      const supplied = chart.config.options || {};
+      const isBar = chart.config.type === "bar";
+      const defaults = isBar
+        ? {
+            indexAxis: "y",
+            plugins: {
+              legend: {
+                display: false
+              }
+            },
+            scales: {
+              x: {
+                ...commonOptions.scales.y,
+                beginAtZero: true,
+                ticks: {
+                  ...commonOptions.scales.y.ticks,
+                  callback: formatNumber
+                }
+              },
+              y: {
+                ...commonOptions.scales.x,
+                ticks: {
+                  ...commonOptions.scales.x.ticks,
+                  callback(value) {
+                    return shortenCategoryLabel(this.getLabelForValue(value));
+                  }
+                }
+              }
+            }
+          }
+        : {
+            interaction: {
+              intersect: false,
+              mode: "index"
+            },
+            scales: {
+              y: {
+                ...commonOptions.scales.y,
+                ticks: {
+                  ...commonOptions.scales.y.ticks,
+                  callback: formatNumber
+                }
+              }
+            }
+          };
 
-      data: {
-        labels: HOMEBREW_DATA.codeEditors.labels,
+      const defaultPlugins = defaults.plugins || {};
+      const suppliedPlugins = supplied.plugins || {};
+      const defaultScales = defaults.scales || {};
+      const suppliedScales = supplied.scales || {};
 
-        datasets: HOMEBREW_DATA.codeEditors.datasets.map((dataset, index) => ({
-          ...dataset,
-
-          borderColor: [
-            "#4f7c45",
-            "#c48a38",
-            "#171914",
-            "#31552e",
-            "#8c6b2f"
-          ][index],
-
-          backgroundColor: "transparent",
-          borderWidth: 2.5,
-          pointRadius: 3,
-          pointHoverRadius: 6,
-          tension: 0.35
-        }))
-      },
-
-      options: {
+      return {
         ...commonOptions,
-
-        interaction: {
-          intersect: false,
-          mode: "index"
-        },
-
+        ...defaults,
+        ...supplied,
         plugins: {
           ...commonOptions.plugins,
-
+          ...defaultPlugins,
+          ...suppliedPlugins,
+          legend: {
+            ...commonOptions.plugins.legend,
+            ...(defaultPlugins.legend || {}),
+            ...(suppliedPlugins.legend || {})
+          },
           tooltip: {
             ...commonOptions.plugins.tooltip,
-
+            ...(defaultPlugins.tooltip || {}),
+            ...(suppliedPlugins.tooltip || {}),
             callbacks: {
-              label: context =>
-                `  ${context.dataset.label}: ${context.raw.toLocaleString()}`
+              label: context => {
+                const label = context.dataset.label || "Value";
+                const value = formatNumber(context.raw);
+                const unit = label.includes("%") ? "%" : "";
+                return `  ${label}: ${value}${unit}`;
+              },
+              ...(suppliedPlugins.tooltip?.callbacks || {})
             }
           }
         },
-
         scales: {
           ...commonOptions.scales,
-
+          ...defaultScales,
+          ...suppliedScales,
+          x: {
+            ...commonOptions.scales.x,
+            ...(defaultScales.x || {}),
+            ...(suppliedScales.x || {})
+          },
           y: {
             ...commonOptions.scales.y,
-
-            ticks: {
-              callback: value =>
-                value >= 1000
-                  ? `${Math.round(value / 1000)}k`
-                  : value
-            }
+            ...(defaultScales.y || {}),
+            ...(suppliedScales.y || {})
           }
         }
+      };
+    }
+
+    function styledDatasets(chart) {
+      const datasets = chart.config.data.datasets || [];
+      const isBar = chart.config.type === "bar";
+
+      return datasets.map((dataset, index) => ({
+        ...dataset,
+        ...(isBar
+          ? {
+              backgroundColor: dataset.backgroundColor || COLORS[index % COLORS.length],
+              borderRadius: dataset.borderRadius ?? 6,
+              barThickness: dataset.barThickness ?? 24
+            }
+          : {
+              borderColor: dataset.borderColor || COLORS[index % COLORS.length],
+              backgroundColor: dataset.backgroundColor || "transparent",
+              borderWidth: dataset.borderWidth ?? 2.5,
+              pointRadius: dataset.pointRadius ?? 3,
+              pointHoverRadius: dataset.pointHoverRadius ?? 6,
+              tension: dataset.tension ?? 0.35
+            })
+      }));
+    }
+
+    function createChartCard(chart, index) {
+      const card = document.createElement("article");
+      card.className = "chart-card";
+
+      const copy = document.createElement("div");
+      copy.className = "chart-card-copy";
+
+      const number = document.createElement("div");
+      number.className = "section-number";
+      number.textContent = String(index + 1).padStart(2, "0");
+      copy.append(number);
+
+      const title = document.createElement("h2");
+      title.textContent = chart.title;
+      copy.append(title);
+
+      if (chart.description) {
+        const description = document.createElement("p");
+        description.className = "description";
+        description.textContent = chart.description;
+        copy.append(description);
+      }
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "chart-wrapper";
+
+      const canvas = document.createElement("canvas");
+      canvas.id = chart.id;
+      canvas.setAttribute("aria-label", chart.title);
+      wrapper.append(canvas);
+
+      card.append(copy, wrapper);
+      return { card, canvas };
+    }
+
+    function renderCharts(charts) {
+      const chartList = document.getElementById("chartList");
+      const renderedCharts = charts.map(createChartCard);
+      const fragment = document.createDocumentFragment();
+
+      renderedCharts.forEach(({ card }) => fragment.append(card));
+      chartList.replaceChildren(fragment);
+
+      renderedCharts.forEach(({ canvas }, index) => {
+        const chart = charts[index];
+        new Chart(canvas, {
+          type: chart.config.type,
+          data: {
+            ...chart.config.data,
+            datasets: styledDatasets(chart)
+          },
+          options: mergeOptions(chart)
+        });
+      });
+    }
+
+    async function loadCharts() {
+      const chartList = document.getElementById("chartList");
+
+      try {
+        const response = await fetch(CHARTS_URL);
+        if (!response.ok) {
+          throw new Error(`Could not load ${CHARTS_URL}: ${response.status}`);
+        }
+
+        const charts = await response.json();
+        if (!Array.isArray(charts)) {
+          throw new Error("Chart data must be a list.");
+        }
+
+        renderCharts(charts);
+      } catch (error) {
+        console.error(error);
+        chartList.replaceChildren();
+
+        const message = document.createElement("p");
+        message.className = "error";
+        message.textContent = "The latest charts could not be loaded.";
+        chartList.append(message);
       }
     }
-  );
 
+    document.getElementById("lastUpdated").textContent =
+      new Date().toLocaleString(undefined, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
 
-  /*
-   * ============================================================
-   * FOOTER DATE
-   * ============================================================
-   */
-
-  document.getElementById("lastUpdated").textContent =
-    new Date().toLocaleString(undefined, {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
-    });
-
-</script>
-
+    loadCharts();
+  </script>
 </body>
 </html>

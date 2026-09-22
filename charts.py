@@ -1,3 +1,4 @@
+import json
 import re
 import sqlite3
 import subprocess
@@ -98,6 +99,9 @@ class ChartData:
     description: str | None = None
     value_column: str = "count"
     value_label: str = "Installs"
+    category_column: str = "name"
+    date_column: str = "date"
+    options: Mapping[str, Any] = field(default_factory=dict)
     id: str = field(init=False)
 
     def __post_init__(self) -> None:
@@ -105,18 +109,9 @@ class ChartData:
 
 
 def chartjs_record(
-    df: DataFrame,
-    *,
-    title: str,
-    chart_type: ChartType,
-    value_column: str = "count",
-    category_column: str = "name",
-    date_column: str = "date",
-    value_label: str | None = None,
-    description: str | None = None,
-    options: Mapping[str, Any] | None = None,
+    chart: ChartData,
 ) -> dict[str, Any]:
-    """Convert one analysis DataFrame into a self-contained Chart.js record.
+    """Convert one chart definition into a self-contained Chart.js record.
 
     A line chart expects long-form date, category, and value columns. It emits one
     dataset per category and uses ISO-8601 date labels. A missing category/date
@@ -125,35 +120,34 @@ def chartjs_record(
     A bar chart expects one category/value row per bar. The value may be an
     absolute count or a percentage; its meaning is supplied by ``value_label``.
     """
-    chart_type = ChartType(chart_type)
-    chart_id = _slugify_title(title)
+    chart_type = ChartType(chart.chart_type)
 
     if chart_type is ChartType.LINE:
         data = _time_series_chart_data(
-            df,
-            date_column=date_column,
-            category_column=category_column,
-            value_column=value_column,
+            chart.df,
+            date_column=chart.date_column,
+            category_column=chart.category_column,
+            value_column=chart.value_column,
         )
     else:
         data = _category_values_chart_data(
-            df,
-            category_column=category_column,
-            value_column=value_column,
-            value_label=value_label,
+            chart.df,
+            category_column=chart.category_column,
+            value_column=chart.value_column,
+            value_label=chart.value_label,
         )
 
     record: dict[str, Any] = {
-        "id": chart_id,
-        "title": title,
+        "id": chart.id,
+        "title": chart.title,
         "config": {
             "type": chart_type.value,
             "data": data,
-            "options": dict(options or {}),
+            "options": dict(chart.options),
         },
     }
-    if description is not None:
-        record["description"] = description
+    if chart.description is not None:
+        record["description"] = chart.description
 
     return record
 
@@ -315,6 +309,7 @@ def get_chart_data() -> list[ChartData]:
             df=pd.read_sql_query(QUERY_GAINERS, conn),
             value_column="pct_growth",
             value_label="Growth percentage (%)",
+            description="Packages with the highest recent week-by-week growth and had at least 500 installs.",
         )
     )
 
@@ -324,13 +319,13 @@ def get_chart_data() -> list[ChartData]:
             title="New entries",
             chart_type=ChartType.BAR,
             df=pd.read_sql_query(QUERY_NEW_ENTRIES, conn),
+            description="New packages last week by no of installs.",
         )
     )
 
     # --- Code editors ---
     match_list = ", ".join(
-        f"'{name}'"
-        for name in brew_search(r"/.*edit.*code.*/") + brew_search(r"/.*code.*edit.*/")
+        f"'{name}'" for name in brew_search(r"/(?i)(?=.*code)(?=.*edit)/")
     )
     chart_data.append(
         ChartData(
@@ -510,7 +505,8 @@ def get_chart_data() -> list[ChartData]:
 
 
 def main():
-    print(get_chart_data())
+    records = [chartjs_record(chart) for chart in get_chart_data()]
+    print(json.dumps(records))
 
 
 if __name__ == "__main__":
