@@ -156,7 +156,7 @@ top_trend(df_dumps, "Total Installs over Time by Category")
 pkgs = brew_search("/(?i)(?=.*web browser)/")
 match_list = ", ".join(f"'{name}'" for name in pkgs)
 df = pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn)
-top_trend(df, "javascript runtimes")
+top_trend(df, "web browsers")
 
 # %% published charts
 

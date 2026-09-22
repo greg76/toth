@@ -5,6 +5,7 @@ import subprocess
 import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -506,7 +507,13 @@ def get_chart_data() -> list[ChartData]:
 
 def main():
     records = [chartjs_record(chart) for chart in get_chart_data()]
-    print(json.dumps(records))
+    payload = {
+        "generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+            "+00:00", "Z"
+        ),
+        "charts": records,
+    }
+    print(json.dumps(payload))
 
 
 if __name__ == "__main__":
