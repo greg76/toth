@@ -16,7 +16,7 @@ from compression import zstd
 from matplotlib.ticker import EngFormatter
 from pandas.core.frame import DataFrame
 
-from charts import QUERY, brew_search, conn
+from charts import QUERY_TEMPLATE, ChartType, brew_search, conn, get_chart_data
 
 
 def disk_cache(ttl=3600 * 24, cache_dir="/tmp/toth-cache"):
@@ -97,6 +97,7 @@ def top_trend(df: DataFrame, title: str | None = None) -> None:
     # names with no data on the last date go at the end
     order += [n for n in df["name"].unique() if n not in order]
 
+    plt.figure(figsize=(9, 4), layout="constrained")
     ax = sns.lineplot(
         data=df,
         x="date",
@@ -110,8 +111,8 @@ def top_trend(df: DataFrame, title: str | None = None) -> None:
     ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1))
     ax.yaxis.set_major_formatter(EngFormatter())
     plt.xticks(rotation=90)
-    plt.ylabel("installs")
-    plt.title(f"Top {title if title else 'list'}")
+    plt.ylabel("Installs")
+    plt.title(f"{title if title else 'Top list'}")
     plt.show()
 
 # %% total install counts from dumps
@@ -150,239 +151,25 @@ df_dumps["date"] = pd.to_datetime(df_dumps["date"])
 df_dumps = df_dumps.sort_values("date")
 
 top_trend(df_dumps, "Total Installs over Time by Category")
-# %% top gainers
-
-df = pd.read_sql_query(
-    """
-    WITH last_two_dates AS (
-      SELECT DISTINCT date FROM counts ORDER BY date DESC LIMIT 2
-    ),
-    prev AS (
-      SELECT name_id, count
-      FROM counts
-      WHERE date = (SELECT MIN(date) FROM last_two_dates)
-    ),
-    curr AS (
-      SELECT name_id, count
-      FROM counts
-      WHERE date = (SELECT MAX(date) FROM last_two_dates)
-    )
-    SELECT
-      names.name,
-      -- prev.count AS prev_count,
-      -- curr.count AS curr_count,
-      ROUND((curr.count - prev.count) * 100.0 / prev.count, 2) AS pct_growth
-    FROM curr
-    JOIN prev  ON prev.name_id = curr.name_id
-    JOIN names ON names.name_id = curr.name_id
-    -- WHERE prev.count > 750
-    ORDER BY pct_growth DESC
-    LIMIT 10;
-    """,
-    conn,
-)
-
-sns.barplot(x="pct_growth", y="name", data=df)
-plt.ylabel("Package name")
-plt.xlabel("Growth percentage (%)")
-plt.title("Top gainers last week")
-plt.show()
-
-# %% new entries
-
-df = pd.read_sql_query(
-    """
-    WITH ranked AS (
-        SELECT
-            counts.name_id,
-            names.name,
-            counts.date,
-            counts.count,
-            ROW_NUMBER() OVER (
-                PARTITION BY counts.name_id
-                ORDER BY counts.date DESC
-            ) AS rn,
-            MAX(
-                CASE
-                    WHEN counts.count <> 0 THEN 1
-                    ELSE 0
-                END
-            ) OVER (
-                PARTITION BY counts.name_id
-                ORDER BY counts.date
-                ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-            ) AS had_previous_event
-        FROM counts
-        JOIN names ON names.name_id = counts.name_id
-    )
-    SELECT
-        date,
-        name,
-        count
-    FROM ranked
-    WHERE rn = 1
-      AND COALESCE(had_previous_event, 0) = 0
-    ORDER BY count DESC
-    LIMIT 10;
-    """,
-    conn,
-)
-
-sns.barplot(x="count", y="name", data=df)
-plt.ylabel("Package name")
-plt.xlabel("Installs")
-plt.title("Top new entries last week")
-plt.show()
-
-# %% code editors over time
-
-match_list = ", ".join(
-    f"'{name}'"
-    for name in brew_search(r"/.*edit.*code.*/") + brew_search(r"/.*code.*edit.*/")
-)
-
-df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-top_trend(df, "code editors")
-
-# %% coding agents over time
-
-agents = set(
-    brew_search(
-        r"/(?i)\A(?!.*(?:menu bar|status|pet|memory upgrade)).*\bcod(e|ing)\b\s\b(agent|assistant)\b.*/"
-    )
-    + brew_search(
-        r"/(?i)\A(?!.*(?:review|documentation|language|workout|usage tracker|manage)).*\bAI\b.*(?:programming|code)/"
-    )
-)
-
-"""
-with zstd.open("descriptions.json.zst", "rb") as f:
-    descriptions = json.loads(f.read().decode("utf-8"))
-
-max_len = max(len(agent) for agent in agents)
-
-for agent in sorted(agents):
-    print(f"{agent:<{max_len}}\t{descriptions.get(agent)}")
-"""
-
-agents.update(
-    [
-        "antigravity",  # Agent orchestration platform
-        "antigravity-cli",  # Terminal interface for Antigravity agents
-        "gemini-cli",  # Interact with Google Gemini AI models from the command-line
-        "charmbracelet/tap/crush",
-        "anomalyco/tap/opencode",
-        "pi-coding-agent",  # AI agent toolkit
-    ]
-)
-
-match_list = ", ".join(f"'{name}'" for name in agents)
-df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-top_trend(df, "coding harnesses")
-# %% agent harnesses
-pkgs = set(
-    brew_search(
-        r"/(?i)^(?!.*(?:operator|cod(e|ing)|IDE|scanner|orchestrator|command|container|manage(r)?)).*\bai (agent|assistant)\b/"
-    )
-    + brew_search("agent runtime")
-)
-pkgs -= {"google-gemini"}
-
-match_list = ", ".join(
-    f"'{name}'"
-    for name in pkgs
-    if not any(keyword in str(name) for keyword in ["coding", "code"])
-)
-df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-
-top_trend(df, "AI agents")
-
-
-# %% LLM runners
-pkgs = set(
-    brew_search("/(?i)^(?!.*(?:token|dictation)).*LLM.*/")
-    + brew_search("/(?i)^.*offline ai.*/")
-    + brew_search("/(?i)^(?!.*token).*large language model.*/")
-    + ["mlx"]
-)
-
-match_list = ", ".join(f"'{name}'" for name in pkgs)
-df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-
-top_trend(df, "LLM runners")
-
-# %% container runers
-
-pkgs = brew_search(
-    "/(?i)(?=.*container)(?=.*(build|run(ner|times?)?|desktop|gui|manag(e|ing)))/"
-)
-
-match_list = ", ".join(f"'{name}'" for name in pkgs)
-df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-
-top_trend(df, "container runners")
-# %% languages and runtimes
-
-pkgs = set(
-    brew_search(
-        r"/(?i)(?=.*(?:programming|compiler|interpreter|scripting|sdk))(?=.*language)/"
-    )
-    + brew_search(r"/(?i)(?=.*javascript)(?=.*runtime)/")
-    + ["rust", "typescript"]
-)
-match_list = ", ".join(f"'{name}'" for name in pkgs)
-df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-top_trend(df, "languages and runtimes")
-
-
 # %% javascript runtimes
 
-pkgs = brew_search("/(?i)(?=.*javascript)(?=.*runtime)/")
+pkgs = brew_search("/(?i)(?=.*web browser)/")
 match_list = ", ".join(f"'{name}'" for name in pkgs)
-df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-
+df = pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn)
 top_trend(df, "javascript runtimes")
 
-# %% python package managers
-pkgs = set(
-    brew_search("python package")
-    + brew_search("python dependency")
-    # + brew_search("python environment")
-    + brew_search("conda")
-    + ["pixi"]
-)
-match_list = ", ".join(f"'{name}'" for name in pkgs)
-df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-top_trend(df, "python package managers")
+# %% published charts
 
-# %% terminal emulators over time
-
-match_list = ", ".join(f"'{name}'" for name in brew_search("terminal emulator"))
-
-df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-top_trend(df, "terminal emulators")
-
-# %% search tools
-
-pkgs = set(brew_search("/(?i)^(?!.*(?:backend)).*search|find.*/"))
-match_list = ", ".join(f"'{name}'" for name in pkgs)
-df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-top_trend(df, "search tools")
-
-# %% compression tools
-
-pkgs = set(
-    brew_search("/(?i)^(?!.*(?:image)).*compression.*/") + brew_search("archiver")
-)
-match_list = ", ".join(f"'{name}'" for name in pkgs)
-df = pd.read_sql_query(QUERY.format(f"IN ({match_list})"), conn)
-top_trend(df, "compression packages")
-
-
-# %% font data over time
-
-df = pd.read_sql_query(QUERY.format("LIKE 'font-%'"), conn)
-top_trend(df, "fonts")
+for chart in get_chart_data():
+    if chart.chart_type == ChartType.BAR:
+        plt.figure(figsize=(9, 4), layout="constrained")
+        sns.barplot(x=chart.value_column, y="name", data=chart.df)
+        plt.ylabel("Package name")
+        plt.xlabel(chart.value_label)
+        plt.title(chart.title)
+        plt.show()
+    elif chart.chart_type == ChartType.LINE:
+        top_trend(chart.df, title=chart.title)
 
 # %% load libraries for  clustering descriptions
 

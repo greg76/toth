@@ -3,16 +3,17 @@ import sqlite3
 import subprocess
 import unicodedata
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+import pandas as pd
 from pandas.core.frame import DataFrame
 
 DB_PATH = "brew_stats.db"
 conn = sqlite3.connect(DB_PATH)
 
-QUERY = """
+QUERY_TEMPLATE = """
 WITH cleaned AS (
     SELECT
         counts.date,
@@ -47,22 +48,60 @@ WHERE name IN (SELECT name FROM top_names)
 ORDER BY date, name
 """
 
+QUERY_NEW_ENTRIES = """
+WITH ranked AS (
+    SELECT
+        counts.name_id,
+        names.name,
+        counts.date,
+        counts.count,
+        ROW_NUMBER() OVER (PARTITION BY counts.name_id ORDER BY counts.date DESC) AS rn,
+        MAX(CASE WHEN counts.count <> 0 THEN 1 ELSE 0 END)
+            OVER (PARTITION BY counts.name_id ORDER BY counts.date ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)
+            AS had_previous_event
+    FROM counts
+    JOIN names ON names.name_id = counts.name_id
+)
+SELECT date, name, count FROM ranked WHERE rn = 1 AND COALESCE(had_previous_event, 0) = 0 ORDER BY count DESC LIMIT 10;
+"""
+
+QUERY_GAINERS = """
+WITH last_two_dates AS (
+    SELECT DISTINCT date FROM counts ORDER BY date DESC LIMIT 2),
+prev AS (
+    SELECT name_id, count FROM counts WHERE date = (SELECT MIN(date) FROM last_two_dates)
+),
+curr AS (
+    SELECT name_id, count FROM counts WHERE date = (SELECT MAX(date) FROM last_two_dates)
+)
+SELECT
+    names.name, ROUND((curr.count - prev.count) * 100.0 / prev.count, 2) AS pct_growth
+FROM curr
+JOIN prev  ON prev.name_id = curr.name_id
+JOIN names ON names.name_id = curr.name_id
+ORDER BY pct_growth DESC
+LIMIT 10;
+"""
+
 
 class ChartType(str, Enum):
     """Chart.js types whose DataFrame layout this notebook supports."""
-
     BAR = "bar"
     LINE = "line"
 
 
 @dataclass(frozen=True)
-class ChartDef:
-    id: str
+class ChartData:
     title: str
     chart_type: ChartType
-    query: str
+    df: DataFrame
     description: str | None = None
-    value_label: str | None = None
+    value_column: str = "count"
+    value_label: str = "Installs"
+    id: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "id", _slugify_title(self.title))
 
 
 def chartjs_record(
@@ -265,4 +304,214 @@ def brew_search(desc: str) -> list[str | None]:
 # --- actual list of charts ---
 #
 
-CHARTS: list[ChartDef] = []
+def get_chart_data() -> list[ChartData]:
+    chart_data: list[ChartData] = []
+
+    # --- Top gainers ---
+    chart_data.append(
+        ChartData(
+            title="Top gainers",
+            chart_type=ChartType.BAR,
+            df=pd.read_sql_query(QUERY_GAINERS, conn),
+            value_column="pct_growth",
+            value_label="Growth percentage (%)",
+        )
+    )
+
+    # --- New entries ---
+    chart_data.append(
+        ChartData(
+            title="New entries",
+            chart_type=ChartType.BAR,
+            df=pd.read_sql_query(QUERY_NEW_ENTRIES, conn),
+        )
+    )
+
+    # --- Code editors ---
+    match_list = ", ".join(
+        f"'{name}'"
+        for name in brew_search(r"/.*edit.*code.*/") + brew_search(r"/.*code.*edit.*/")
+    )
+    chart_data.append(
+        ChartData(
+            title="Code editors",
+            chart_type=ChartType.LINE,
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+        )
+    )
+
+    # --- coding harnesses ---
+    agents = set(
+        brew_search(
+            r"/(?i)\A(?!.*(?:menu bar|status|pet|memory upgrade)).*\bcod(e|ing)\b\s\b(agent|assistant)\b.*/"
+        )
+        + brew_search(
+            r"/(?i)\A(?!.*(?:review|documentation|language|workout|usage tracker|manage)).*\bAI\b.*(?:programming|code)/"
+        )
+    )
+    agents.update(
+        [
+            "antigravity",  # Agent orchestration platform
+            "antigravity-cli",  # Terminal interface for Antigravity agents
+            "gemini-cli",  # Interact with Google Gemini AI models from the command-line
+            "charmbracelet/tap/crush",
+            "anomalyco/tap/opencode",
+            "pi-coding-agent",  # AI agent toolkit
+        ]
+    )
+    match_list = ", ".join(f"'{name}'" for name in agents)
+    chart_data.append(
+        ChartData(
+            title="Coding harnesses",
+            chart_type=ChartType.LINE,
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+        )
+    )
+
+    # --- AI agent ---
+    pkgs = set(
+        brew_search(
+            r"/(?i)^(?!.*(?:operator|cod(e|ing)|IDE|scanner|orchestrator|command|container|manage(r)?)).*\bai (agent|assistant)\b/"
+        )
+        + brew_search("agent runtime")
+    )
+    pkgs -= {"google-gemini"}
+    match_list = ", ".join(
+        f"'{name}'"
+        for name in pkgs
+        if not any(keyword in str(name) for keyword in ["coding", "code"])
+    )
+    chart_data.append(
+        ChartData(
+            title="AI agents",
+            chart_type=ChartType.LINE,
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+        )
+    )
+
+    # --- LLM runners ---
+    pkgs = set(
+        brew_search("/(?i)^(?!.*(?:token|dictation)).*LLM.*/")
+        + brew_search("/(?i)^.*offline ai.*/")
+        + brew_search("/(?i)^(?!.*token).*large language model.*/")
+        + ["mlx"]
+    )
+    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    chart_data.append(
+        ChartData(
+            title="LLM runners",
+            chart_type=ChartType.LINE,
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+        )
+    )
+
+    # --- container runers ---
+    pkgs = brew_search(
+        "/(?i)(?=.*container)(?=.*(build|run(ner|times?)?|desktop|gui|manag(e|ing)))/"
+    )
+    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    chart_data.append(
+        ChartData(
+            title="Container runners",
+            chart_type=ChartType.LINE,
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+        )
+    )
+
+    # --- languages and runtimes ---
+    pkgs = set(
+        brew_search(
+            r"/(?i)(?=.*(?:programming|compiler|interpreter|scripting|sdk))(?=.*language)/"
+        )
+        + brew_search(r"/(?i)(?=.*javascript)(?=.*runtime)/")
+        + ["rust", "typescript"]
+    )
+    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    chart_data.append(
+        ChartData(
+            title="Languages and runtimes",
+            chart_type=ChartType.LINE,
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+        )
+    )
+
+    # --- javascript runtimes ---
+    pkgs = brew_search("/(?i)(?=.*javascript)(?=.*runtime)/")
+    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    chart_data.append(
+        ChartData(
+            title="JavaScript runtimes",
+            chart_type=ChartType.LINE,
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+        )
+    )
+
+    # --- python package managers ---
+    pkgs = set(
+        brew_search("python package")
+        + brew_search("python dependency")
+        # + brew_search("python environment")
+        + brew_search("conda")
+        + ["pixi"]
+    )
+    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    chart_data.append(
+        ChartData(
+            title="Python package managers",
+            chart_type=ChartType.LINE,
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+        )
+    )
+
+    # --- terminal emulators over time ---
+    match_list = ", ".join(f"'{name}'" for name in brew_search("terminal emulator"))
+    chart_data.append(
+        ChartData(
+            title="Terminal emulators",
+            chart_type=ChartType.LINE,
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+        )
+    )
+
+    # --- search tools ---
+    pkgs = set(brew_search("/(?i)^(?!.*(?:backend)).*search|find.*/"))
+    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    chart_data.append(
+        ChartData(
+            title="Search tools",
+            chart_type=ChartType.LINE,
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+        )
+    )
+
+    # --- compression tools ---
+    pkgs = set(
+        brew_search("/(?i)^(?!.*(?:image)).*compression.*/") + brew_search("archiver")
+    )
+    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    chart_data.append(
+        ChartData(
+            title="Compression tools",
+            chart_type=ChartType.LINE,
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+        )
+    )
+
+    # --- font data over time ---
+    chart_data.append(
+        ChartData(
+            title="Fonts",
+            chart_type=ChartType.LINE,
+            df=pd.read_sql_query(QUERY_TEMPLATE.format("LIKE 'font-%'"), conn),
+        )
+    )
+
+    return chart_data
+
+
+def main():
+    print(get_chart_data())
+
+
+if __name__ == "__main__":
+    main()
