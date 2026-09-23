@@ -10,13 +10,12 @@ The report currently covers things like code editors, coding harnesses, AI agent
 
 ## How it works
 
-- Fetch Homebrew's 30-day analytics for formulas and casks.
-- [fetch.py](fetch.py)
-  - [dumps](dumps/) a compressed json snapshot of the original api responses
+- [Fetch](fetch.py) Homebrew's 30-day analytics for [formulas](https://formulae.brew.sh/analytics/install-on-request/30d/) and [casks](https://formulae.brew.sh/analytics/cask-install/30d/).
+  - [dumps](dumps/) the compressed json snapshots of the original api responses
   - Store weekly snapshots locally in SQLite.
 - Build a set of curated categories by searching Homebrew package descriptions.
 - Generate the charts published in `docs/`.
-- [discovery.py](discovery.py) is a notebook script to validate queries, charts before they graduate to [scripts.py](scripts.py) that is produces the output for the [web site folder](docs/)
+- [discovery.py](discovery.py) is a notebook script to validate queries, charts before they graduate to [charts.py](charts.py) that produces the output for the [web site folder](docs/)
 
 The data is based on Homebrew's install analytics, so the numbers represent **installs over the preceding 30 days**, sampled at roughly weekly intervals — not installs during that particular week.
 
@@ -33,4 +32,10 @@ To rebuild the database from existing snapshots:
 
 ```bash
 python fetch.py --backfill
+```
+
+Produce the [charts.json](docs/charts.json) export that is used for dynamically build the list of diagram cards. (in a chart.js friendly format)
+
+```bash
+python charts.py
 ```

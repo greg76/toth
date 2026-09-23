@@ -14,6 +14,9 @@ from pandas.core.frame import DataFrame
 
 DB_PATH = "brew_stats.db"
 conn = sqlite3.connect(DB_PATH)
+DATA_DATE_FORMAT = "%Y%m%d"
+
+QUERY_LATEST_DATE = "SELECT MAX(date) AS latest_date FROM counts"
 
 QUERY_TEMPLATE = """
 WITH cleaned AS (
@@ -333,6 +336,7 @@ def get_chart_data() -> list[ChartData]:
             title="Code editors",
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            description="Packages whose descriptions indicate that they are used for editing code. With coding harnesses becoming more capable, does coding move away from the editor?",
         )
     )
 
@@ -361,6 +365,7 @@ def get_chart_data() -> list[ChartData]:
             title="Coding harnesses",
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            description="AI coding tools designed to work on code, rather than just help you write it.",
         )
     )
 
@@ -382,6 +387,7 @@ def get_chart_data() -> list[ChartData]:
             title="AI agents",
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            description="AI assistants that can use tools, manage tasks and work towards a goal.",
         )
     )
 
@@ -398,10 +404,11 @@ def get_chart_data() -> list[ChartData]:
             title="LLM runners",
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            description="Tools for downloading, running and interacting with large language models locally.",
         )
     )
 
-    # --- container runers ---
+    # --- container runners ---
     pkgs = brew_search(
         "/(?i)(?=.*container)(?=.*(build|run(ner|times?)?|desktop|gui|manag(e|ing)))/"
     )
@@ -411,6 +418,7 @@ def get_chart_data() -> list[ChartData]:
             title="Container runners",
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            description="Tools for building, running and managing containers — isolated environments for running software and its dependencies.",
         )
     )
 
@@ -428,6 +436,7 @@ def get_chart_data() -> list[ChartData]:
             title="Languages and runtimes",
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            description="Programming languages, compilers, interpreters and runtimes used to write and run software.",
         )
     )
 
@@ -439,6 +448,7 @@ def get_chart_data() -> list[ChartData]:
             title="JavaScript runtimes",
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            description="Runtimes for executing JavaScript outside the browser.",
         )
     )
 
@@ -456,6 +466,7 @@ def get_chart_data() -> list[ChartData]:
             title="Python package managers",
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            description="Tools for installing and managing Python tools, packages and their dependencies.",
         )
     )
 
@@ -466,6 +477,7 @@ def get_chart_data() -> list[ChartData]:
             title="Terminal emulators",
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            description="Alternative terminals that offer more than the OS default. Improved UI and features for managing multiple or remote sessions.",
         )
     )
 
@@ -477,6 +489,7 @@ def get_chart_data() -> list[ChartData]:
             title="Search tools",
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            description="Command-line tools for finding files, searching code and filtering results. Often faster and more convenient than the traditional Unix tools.",
         )
     )
 
@@ -490,6 +503,7 @@ def get_chart_data() -> list[ChartData]:
             title="Compression tools",
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            description="Tools for compressing, decompressing, archiving, efficiently storing and moving files around.",
         )
     )
 
@@ -499,6 +513,7 @@ def get_chart_data() -> list[ChartData]:
             title="Fonts",
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(QUERY_TEMPLATE.format("LIKE 'font-%'"), conn),
+            description="Developer and terminal fonts, including monospaced fonts with extra glyphs for richer prompts and text interfaces.",
         )
     )
 
@@ -506,9 +521,16 @@ def get_chart_data() -> list[ChartData]:
 
 
 def main():
+    latest_date = conn.execute(QUERY_LATEST_DATE).fetchone()[0]
+    if latest_date is None:
+        raise RuntimeError("The counts table does not contain any data.")
+
+    generated_at = datetime.strptime(latest_date, DATA_DATE_FORMAT).replace(
+        tzinfo=timezone.utc
+    )
     records = [chartjs_record(chart) for chart in get_chart_data()]
     payload = {
-        "generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+        "generatedAt": generated_at.isoformat(timespec="seconds").replace(
             "+00:00", "Z"
         ),
         "charts": records,
