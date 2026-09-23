@@ -364,6 +364,11 @@
       return number.toLocaleString();
     }
 
+    function formatValue(value, label) {
+      const unit = label.includes("%") ? "%" : "";
+      return `${formatNumber(value)}${unit}`;
+    }
+
     function shortenCategoryLabel(value) {
       const label = String(value);
       if (label.length <= MAX_CATEGORY_LABEL_LENGTH) {
@@ -390,7 +395,10 @@
                 beginAtZero: true,
                 ticks: {
                   ...commonOptions.scales.y.ticks,
-                  callback: formatNumber
+                  callback(value) {
+                    const valueLabel = chart.config.data.datasets?.[0]?.label || "";
+                    return formatValue(value, valueLabel);
+                  }
                 }
               },
               y: {
@@ -445,9 +453,7 @@
             callbacks: {
               label: context => {
                 const label = context.dataset.label || "Value";
-                const value = formatNumber(context.raw);
-                const unit = label.includes("%") ? "%" : "";
-                return `  ${label}: ${value}${unit}`;
+                return `  ${label}: ${formatValue(context.raw, label)}`;
               },
               ...(suppliedPlugins.tooltip?.callbacks || {})
             }
