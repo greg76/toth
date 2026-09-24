@@ -1,13 +1,7 @@
 # %% imports, constants, helper functions
 
-import functools
-import hashlib
 import json
-import pickle
-import time
-import urllib.request
 from pathlib import Path
-from typing import Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -16,74 +10,14 @@ from compression import zstd
 from matplotlib.ticker import EngFormatter
 from pandas.core.frame import DataFrame
 
-from charts import QUERY_TEMPLATE, ChartType, brew_search, conn, get_chart_data
-
-
-def disk_cache(ttl=3600 * 24, cache_dir="/tmp/toth-cache"):
-    """Decorator that caches function return values on disk using pickle serialization.
-
-    Hashes positional and keyword arguments using SHA-256 to generate cache keys.
-    Cached values are saved as pickle files in `cache_dir` and remain valid for `ttl` seconds.
-
-    Args:
-        ttl (int): Time-to-live for cached entries in seconds. Defaults to 24 hours.
-        cache_dir (str | Path): Directory where cache files are stored. Defaults to ".cache".
-
-    Returns:
-        Callable: A decorator function that wraps the target function with caching logic.
-    """
-    cache_dir = Path(cache_dir)
-    cache_dir.mkdir(exist_ok=True)
-
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            key = hashlib.sha256(repr((args, kwargs)).encode()).hexdigest()
-            path = cache_dir / key
-
-            if path.exists():
-                age = time.time() - path.stat().st_mtime
-                if age < ttl:
-                    return pickle.loads(path.read_bytes())
-
-            result = func(*args, **kwargs)
-            path.write_bytes(pickle.dumps(result))
-            return result
-
-        return wrapper
-
-    return decorator
-
-@disk_cache()
-def get_descriptions() -> dict[str, Any]:
-    URLS = {
-        "formulae": "https://formulae.brew.sh/api/formula.json",
-        "casks": "https://formulae.brew.sh/api/cask.json",
-    }
-
-    descriptions = {}
-
-    for package_type, url in URLS.items():
-        print(f"Downloading {package_type}...")
-        req = urllib.request.Request(
-            url, headers={"User-Agent": "Mozilla/5.0 (Python Script)"}
-        )
-
-        with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read().decode("utf-8"))
-
-            for item in data:
-                raw_name = item.get("token") or item.get("name")
-                desc = item.get("desc")
-
-                if isinstance(raw_name, list) and raw_name:
-                    name = raw_name[0]
-                else:
-                    name = raw_name
-
-                if name and desc:
-                    descriptions[name] = desc
-    return descriptions
+from charts import (
+    QUERY_TEMPLATE,
+    ChartType,
+    brew_search,
+    conn,
+    get_chart_data,
+    get_descriptions,
+)
 
 descriptions = get_descriptions()
 

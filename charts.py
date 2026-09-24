@@ -1,16 +1,29 @@
+import functools
+import hashlib
 import json
+import pickle
 import re
 import sqlite3
-import subprocess
+import tempfile
+import time
 import unicodedata
+import urllib.request
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 from pandas.core.frame import DataFrame
+
+SECONDS_PER_MINUTE = 60
+MINUTES_PER_HOUR = 60
+HOURS_PER_DAY = 24
+SECONDS_PER_HOUR = SECONDS_PER_MINUTE * MINUTES_PER_HOUR
+DESCRIPTION_CACHE_TTL_SECONDS = HOURS_PER_DAY * SECONDS_PER_HOUR
+DESCRIPTION_CACHE_DIR = Path(tempfile.gettempdir()) / "toth-cache"
 
 DB_PATH = "brew_stats.db"
 conn = sqlite3.connect(DB_PATH)
@@ -278,23 +291,78 @@ def _json_value(value: Any) -> int | float:
     return value.item() if hasattr(value, "item") else value
 
 
-def brew_search(desc: str) -> list[str | None]:
-    command = ["brew", "search", "--desc", desc.strip()]
+def disk_cache(ttl: int, cache_dir: Path):
+    """Cache function results on disk for the requested time-to-live."""
+    cache_dir.mkdir(parents=True, exist_ok=True)
 
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
-    except subprocess.CalledProcessError as e:
-        # Triggered if the command returns a non-zero exit status (e.g., brew fails)
-        print(f"Command failed with exit code {e.returncode}")
-        print(f"Error output:\n{e.stderr}")
-        return []
-    except FileNotFoundError:
-        # Triggered if 'brew' is not installed or not in the system PATH
-        print("Error: The 'brew' command was not found.")
-        return []
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            key = hashlib.sha256(repr((args, kwargs)).encode()).hexdigest()
+            path = cache_dir / key
 
+            if path.exists():
+                age = time.time() - path.stat().st_mtime
+                if age < ttl:
+                    return pickle.loads(path.read_bytes())
+
+            result = func(*args, **kwargs)
+            path.write_bytes(pickle.dumps(result))
+            return result
+
+        return wrapper
+
+    return decorator
+
+
+@functools.cache
+@disk_cache(DESCRIPTION_CACHE_TTL_SECONDS, DESCRIPTION_CACHE_DIR)
+def get_descriptions() -> dict[str, str]:
+    """Fetch Homebrew formula and cask descriptions, keyed by package token."""
+    urls = (
+        "https://formulae.brew.sh/api/formula.json",
+        "https://formulae.brew.sh/api/cask.json",
+    )
+    descriptions: dict[str, str] = {}
+
+    for url in urls:
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "Mozilla/5.0 (Python Script)"}
+        )
+        with urllib.request.urlopen(req) as response:
+            items = json.loads(response.read().decode("utf-8"))
+
+        for item in items:
+            name = item.get("token") or item.get("name")
+            description = item.get("desc")
+            if isinstance(name, list):
+                name = next((value for value in name if value), None)
+            if (
+                isinstance(name, str)
+                and name
+                and isinstance(description, str)
+                and description
+            ):
+                descriptions[name] = description
+
+    return descriptions
+
+
+def _description_query_pattern(query: str) -> re.Pattern[str]:
+    """Translate Homebrew's slash-delimited regex query or plain text query."""
+    query = query.strip()
+    if query.startswith("/") and query.endswith("/"):
+        return re.compile(query[1:-1])
+    return re.compile(re.escape(query), re.IGNORECASE)
+
+
+def brew_search(desc: str) -> list[str]:
+    """Return package names whose cached Homebrew descriptions match ``desc``."""
+    pattern = _description_query_pattern(desc)
     return [
-        line.partition(":")[0] for line in result.stdout.splitlines() if ":" in line
+        name
+        for name, description in get_descriptions().items()
+        if pattern.search(description)
     ]
 
 
@@ -482,7 +550,7 @@ def get_chart_data() -> list[ChartData]:
     match_list = ", ".join(f"'{name}'" for name in pkgs)
     chart_data.append(
         ChartData(
-            title="Code anlyzers and linters",
+            title="Code analyzers and linters",
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
             description="Code, configuration, or infrastructure definition inspection to identify potential bugs, security issues, and rule violations without executing them. Includes linters, static analyzers, and security-focused analyzers.",
