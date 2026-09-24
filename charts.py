@@ -470,6 +470,25 @@ def get_chart_data() -> list[ChartData]:
         )
     )
 
+    # -- static code analysers and linters ---
+    pkgs = set(
+        brew_search(
+            r"/(?i)^(?!.*(claude code|colors|prose|visualization|generator|morphological|compile|driver|computation|statically typed))(?=.*(static|analy[sz]e))(?=.*(\bcode\b|python|php|python|java|swift|Elixir|script|logic))/"
+        )
+        + brew_search(r"/(?i)^(?!.*(prose|certificate|preview)).*\blinter\b/")
+    )
+    pkgs.difference_update(["roapi", "sigrok-cli", "memoryanalyzer"])
+
+    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    chart_data.append(
+        ChartData(
+            title="Code anlyzers and linters",
+            chart_type=ChartType.LINE,
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            description="Code, configuration, or infrastructure definition inspection to identify potential bugs, security issues, and rule violations without executing them. Includes linters, static analyzers, and security-focused analyzers.",
+        )
+    )
+
     # --- terminal emulators over time ---
     match_list = ", ".join(f"'{name}'" for name in brew_search("terminal emulator"))
     chart_data.append(

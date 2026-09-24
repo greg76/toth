@@ -85,6 +85,7 @@ def get_descriptions() -> dict[str, Any]:
                     descriptions[name] = desc
     return descriptions
 
+descriptions = get_descriptions()
 
 def top_trend(df: DataFrame, title: str | None = None) -> None:
     df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
@@ -151,6 +152,8 @@ df_dumps["date"] = pd.to_datetime(df_dumps["date"])
 df_dumps = df_dumps.sort_values("date")
 
 top_trend(df_dumps, "Total Installs over Time by Category")
+
+
 # %% javascript runtimes
 
 pkgs = brew_search("/(?i)(?=.*web browser)/")
@@ -182,8 +185,6 @@ from sklearn.metrics.pairwise import cosine_distances
 # %% load and enrich top brew packages with their descriptions
 
 TOP_LIMIT = 500
-
-descriptions = get_descriptions()
 
 df = pd.read_sql_query(
     f"""
