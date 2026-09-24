@@ -21,7 +21,7 @@ The data is based on Homebrew's install analytics, so the numbers represent **in
 
 ## Weekly automation
 
-The [weekly GitHub Actions workflow](.github/workflows/weekly-update.yml) runs every Sunday at 09:17 Europe/Zurich time and can also be started manually from the Actions tab. It uses Python 3.14 and [requirements-workflow.txt](requirements-workflow.txt), which contains the small dependency set needed to fetch data and generate the site.
+The [weekly GitHub Actions workflow](.github/workflows/weekly-update.yml) runs every Sunday at 09:17 Europe/Zurich time. From the Actions tab, manual runs can update with fresh analytics, rebuild charts from saved snapshots, or publish the current site without fetching data. It uses Python 3.14 and [requirements-workflow.txt](requirements-workflow.txt), which contains the small dependency set needed to fetch data and generate the site.
 
 Each run rebuilds the ignored SQLite database from the committed snapshots, fetches the latest data, updates `docs/charts.json`, commits changed snapshots and chart data, and deploys `docs/` to GitHub Pages. The repository's Pages source must be set to **GitHub Actions**. Keep the existing `.zst` files in `dumps/` committed so runs retain the historical trend data.
 
