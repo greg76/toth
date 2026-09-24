@@ -11,13 +11,19 @@ The report currently covers things like code editors, coding harnesses, AI agent
 ## How it works
 
 - [Fetch](fetch.py) Homebrew's 30-day analytics for [formulas](https://formulae.brew.sh/analytics/install-on-request/30d/) and [casks](https://formulae.brew.sh/analytics/cask-install/30d/).
-  - [dumps](dumps/) the compressed json snapshots of the original api responses
-  - Store weekly snapshots locally in SQLite.
+  - Store compressed snapshots of the original API responses in [dumps](dumps/).
+  - Rebuild the SQLite database from those snapshots when needed.
 - Build a set of curated categories by searching Homebrew package descriptions.
 - Generate the charts published in `docs/`.
 - [discovery.py](discovery.py) is a notebook script to validate queries, charts before they graduate to [charts.py](charts.py) that produces the output for the [web site folder](docs/)
 
 The data is based on Homebrew's install analytics, so the numbers represent **installs over the preceding 30 days**, sampled at roughly weekly intervals — not installs during that particular week.
+
+## Weekly automation
+
+The [weekly GitHub Actions workflow](.github/workflows/weekly-update.yml) runs every Sunday at 09:17 Europe/Zurich time and can also be started manually from the Actions tab. It uses Python 3.14 and [requirements-workflow.txt](requirements-workflow.txt), which contains the small dependency set needed to fetch data and generate the site.
+
+Each run rebuilds the ignored SQLite database from the committed snapshots, fetches the latest data, updates `docs/charts.json`, commits changed snapshots and chart data, and deploys `docs/` to GitHub Pages. The repository's Pages source must be set to **GitHub Actions**. Keep the existing `.zst` files in `dumps/` committed so runs retain the historical trend data.
 
 ## Running locally
 

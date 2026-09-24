@@ -1,5 +1,4 @@
 .venv/
-dumps/
 .DS_Store
 brew_stats.db
 __pycache__/
