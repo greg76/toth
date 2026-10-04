@@ -568,6 +568,27 @@ def get_chart_data() -> list[ChartData]:
         )
     )
 
+    # --- shells ---
+    pkgs = brew_search("/(?i)(?=.*(?:unix|posix|berkeley))(?=.*shell)/")
+
+    outliers = """
+    nushell: Modern shell for the GitHub era
+    ksh93: KornShell, ksh93
+    elvish: Friendly and expressive shell
+    powershell: Command-line shell and scripting language
+    """
+    pkgs += [pkg for line in outliers.splitlines() if (pkg := line.split(":")[0])]
+
+    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    chart_data.append(
+        ChartData(
+            title="Command-line shells",
+            chart_type=ChartType.LINE,
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            description="Shells for running commands, scripting tasks and interacting with the operating system.",
+        )
+    )
+
     # --- search tools ---
     pkgs = set(brew_search("/(?i)^(?!.*(?:backend)).*search|find.*/"))
     match_list = ", ".join(f"'{name}'" for name in pkgs)

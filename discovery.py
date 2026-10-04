@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 from compression import zstd
+from IPython.display import display
 from matplotlib.ticker import EngFormatter
 from pandas.core.frame import DataFrame
 
@@ -20,6 +21,7 @@ from charts import (
 )
 
 descriptions = get_descriptions()
+
 
 def top_trend(df: DataFrame, title: str | None = None) -> None:
     df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
@@ -49,6 +51,7 @@ def top_trend(df: DataFrame, title: str | None = None) -> None:
     plt.ylabel("Installs")
     plt.title(f"{title if title else 'Top list'}")
     plt.show()
+
 
 # %% total install counts from dumps
 
@@ -86,14 +89,23 @@ df_dumps["date"] = pd.to_datetime(df_dumps["date"])
 df_dumps = df_dumps.sort_values("date")
 
 top_trend(df_dumps, "Total Installs over Time by Category")
+# %% shell descriptions
 
+pkgs = brew_search("/(?i)(?=.*(?:unix|posix|berkeley))(?=.*shell)/")
 
-# %% javascript runtimes
+outliers = """
+nushell: Modern shell for the GitHub era
+ksh93: KornShell, ksh93
+elvish: Friendly and expressive shell
+powershell: Command-line shell and scripting language
+"""
 
-pkgs = brew_search("/(?i)(?=.*web browser)/")
+pkgs += [pkg for line in outliers.splitlines() if (pkg := line.split(":")[0])]
+
 match_list = ", ".join(f"'{name}'" for name in pkgs)
 df = pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn)
-top_trend(df, "web browsers")
+top_trend(df, "shells")
+
 
 # %% published charts
 
@@ -111,7 +123,6 @@ for chart in get_chart_data():
 # %% load libraries for  clustering descriptions
 
 import hdbscan
-from IPython.display import display
 from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_distances
