@@ -123,13 +123,18 @@ for chart in get_chart_data():
 # %% load libraries for  clustering descriptions
 
 import hdbscan
+import numpy as np
+from scipy.cluster.hierarchy import leaves_list, linkage
+from scipy.spatial.distance import squareform
 from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_distances
+from sklearn.metrics.pairwise import cosine_distances, euclidean_distances
 
 # %% load and enrich top brew packages with their descriptions
 
 TOP_LIMIT = 500
+MIN_CLUSTER_SIZE = 5
+MIN_SAMPLES = 2
 
 df = pd.read_sql_query(
     f"""
@@ -143,7 +148,13 @@ df = pd.read_sql_query(
     conn,
 )
 
-df["desc"] = df["name"].map(descriptions)
+df["desc"] = df["name"].map(descriptions).fillna("").str.strip()
+
+missing_descriptions = df.loc[df["desc"].eq("")].copy()
+print(f"Excluded {len(missing_descriptions)} packages without descriptions:")
+display(missing_descriptions)
+# Keep row positions aligned with embeddings after excluding missing descriptions.
+df = df.loc[df["desc"].ne("")].reset_index(drop=True)
 
 display(df)
 
@@ -151,39 +162,50 @@ display(df)
 
 # 1. Setup & Embeddings
 
+if len(df) < MIN_CLUSTER_SIZE:
+    raise ValueError("Too few packages with descriptions to cluster.")
+
 model = SentenceTransformer("all-MiniLM-L6-v2")
-df["desc"] = df["desc"].fillna("")
-embeddings = model.encode(df["desc"].tolist())
+embeddings = model.encode(df["desc"].tolist(), normalize_embeddings=True)
 
 # 2. HDBSCAN Clustering via Precomputed Cosine Distance
 
 distance_matrix = cosine_distances(embeddings).astype("float64")
 clusterer = hdbscan.HDBSCAN(
-    min_cluster_size=2, metric="precomputed", cluster_selection_method="eom"
+    min_cluster_size=MIN_CLUSTER_SIZE,
+    min_samples=MIN_SAMPLES,
+    metric="precomputed",
+    cluster_selection_method="eom",
 )
 df["cluster"] = clusterer.fit_predict(distance_matrix)
+print(
+    f"{df.loc[df['cluster'] != -1, 'cluster'].nunique()} clusters; "
+    f"{df['cluster'].eq(-1).sum()} of {len(df)} described packages unclustered."
+)
 
 # 3. Function to Extract Top Keywords Per Cluster
 
 
-def get_cluster_keywords(descriptions, top_n=3):
-    """Extracts top TF-IDF terms to summarize a group of text descriptions."""
+# Fit once across all described packages so common corpus terms get less weight.
+vec = TfidfVectorizer(stop_words="english")
+try:
+    tfidf_matrix = vec.fit_transform(df["desc"])
+except ValueError as error:
+    if "empty vocabulary" not in str(error):
+        raise
+    tfidf_matrix = None
 
-    if not descriptions or all(d == "" for d in descriptions):
-        return "Uncategorized"
 
-    vec = TfidfVectorizer(stop_words="english", max_features=10)
-
-    try:
-        tfidf_matrix = vec.fit_transform(descriptions)
-        # Sum TF-IDF scores across all docs in cluster
-        scores = tfidf_matrix.sum(axis=0).A1
-        words = vec.get_feature_names_out()
-        top_indices = scores.argsort()[-top_n:][::-1]
-        return ", ".join([words[i] for i in top_indices])
-    except ValueError:
-        # Fallback if text is too short or contains only stop words
+def get_cluster_keywords(row_indices, top_n=3):
+    """Summarize a cluster using TF-IDF weights from the full corpus."""
+    if tfidf_matrix is None:
         return "General"
+
+    scores = np.asarray(tfidf_matrix[row_indices].mean(axis=0)).ravel()
+    words = vec.get_feature_names_out()
+    top_indices = scores.argsort()[::-1]
+    top_indices = top_indices[scores[top_indices] > 0][:top_n]
+    return ", ".join(words[top_indices]) or "General"
 
 
 # 4. Generate Summary DataFrame (Ordered by total download counts)
@@ -194,13 +216,10 @@ for cluster_id, group in df.groupby("cluster"):
     # Sort individual packages inside the cluster by count descending
     sorted_group = group.sort_values(by="count", ascending=False)
 
-    # Filter out empty descriptions for keyword extraction
-    valid_descs = [d for d in sorted_group["desc"].tolist() if d.strip()]
-
     if cluster_id == -1:
         label = "Noise / Outliers (Unclustered)"
     else:
-        keywords = get_cluster_keywords(valid_descs, top_n=3)
+        keywords = get_cluster_keywords(sorted_group.index.to_numpy(), top_n=3)
         label = f"Cluster {cluster_id}: [{keywords}]"
 
     cluster_summary.append(
@@ -227,8 +246,6 @@ summary_df = pd.concat([valid_clusters, outliers], ignore_index=True)
 display(summary_df)
 # %% visualize how close the clusters are to each other
 
-import matplotlib.pyplot as plt
-import numpy as np
 from sklearn.manifold import MDS
 
 # 1. Compute a centroid embedding per cluster (skip noise, id == -1)
@@ -243,6 +260,9 @@ if len(cluster_ids) < 2:
 else:
     centroid_matrix = np.vstack([centroids[c] for c in cluster_ids])
     centroid_distances = cosine_distances(centroid_matrix)
+    # Remove numerical asymmetry before converting to condensed distances.
+    centroid_distances = (centroid_distances + centroid_distances.T) / 2
+    np.fill_diagonal(centroid_distances, 0)
 
     # Human-readable labels: reuse the TF-IDF keywords from summary_df
     label_map = dict(zip(summary_df["cluster_id"], summary_df["cluster_description"]))
@@ -253,6 +273,31 @@ else:
 
     n = len(labels)
 
+    # Average linkage orders similar clusters together without changing values.
+    order = leaves_list(
+        linkage(squareform(centroid_distances), method="average", optimal_ordering=True)
+    )
+    ordered_labels = [labels[i] for i in order]
+    heatmap_size = max(8, 0.35 * n)
+    fig, hax = plt.subplots(figsize=(heatmap_size + 3, heatmap_size))
+    sns.heatmap(
+        centroid_distances[np.ix_(order, order)],
+        xticklabels=ordered_labels,
+        yticklabels=ordered_labels,
+        cmap="viridis",
+        vmin=0,
+        vmax=2,
+        square=True,
+        cbar_kws={"label": "Cosine distance (0 = identical direction; 2 = opposite)"},
+        ax=hax,
+    )
+    hax.set_title("Cluster centroid distances (lower = more similar)")
+    hax.tick_params(axis="both", labelsize=9)
+    plt.setp(hax.get_xticklabels(), rotation=90)
+    plt.setp(hax.get_yticklabels(), rotation=0)
+    fig.tight_layout()
+    plt.show()
+
     # 2D "map" of the clusters via MDS on the centroid distance matrix
     mds = MDS(
         n_components=2,
@@ -261,6 +306,19 @@ else:
         random_state=42,
     )
     coords = mds.fit_transform(centroid_distances)
+    pairs = np.triu_indices(n, k=1)
+    original_distances = centroid_distances[pairs]
+    projected_distances = euclidean_distances(coords)[pairs]
+    projected_sum_squares = np.sum(projected_distances**2)
+    stress = (
+        np.sqrt(
+            np.sum((original_distances - projected_distances) ** 2)
+            / projected_sum_squares
+        )
+        if projected_sum_squares > 0
+        else float("nan")
+    )
+    print(f"2D projection Stress-1: {stress:.3f} (lower = less distance distortion).")
 
     short_labels = [f"C{cid}" for cid in cluster_ids]
 
@@ -276,7 +334,7 @@ else:
     fig, (ax, lax) = plt.subplots(
         1,
         2,
-        figsize=(9, fig_height),
+        figsize=(12, fig_height),
         gridspec_kw={"width_ratios": [2.2, 1]},
     )
 
@@ -293,7 +351,8 @@ else:
     lax.legend(legend_handles, labels, loc="upper left", fontsize=9, title="Clusters")
     lax.axis("off")
 
-    ax.set_title("Cluster map (MDS of centroid distances; closer = more similar)")
+    ax.set_title(f"Approximate cluster map (MDS; Stress-1 = {stress:.3f})")
+    ax.set_aspect("equal", adjustable="box")
     ax.set_xlabel("MDS 1")
     ax.set_ylabel("MDS 2")
     ax.grid(alpha=0.3)
