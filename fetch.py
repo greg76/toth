@@ -2,27 +2,31 @@
 
 """Fetch Homebrew analytics (formula + cask install counts) and store them.
 
-Each run does two things:
+Each normal run does three things:
   1. Keeps the raw JSON payloads as zstd-compressed dumps on disk (unchanged
      from the original script's behaviour).
   2. Upserts the parsed (date, kind, name, count) rows into a SQLite
      database, with names normalized into their own table so the counts
      table only ever stores integers.
+  3. Refreshes the latest package descriptions, display names and homepages.
+     Metadata is stored only in SQLite; no metadata dumps are written.
 
 Usage:
     python fetch.py              # fetch today's data (or reuse today's dump
                                   # if it's already on disk) and upsert it
     python fetch.py --backfill   # rebuild the DB from every dump already in
                                   # dumps/, instead of hitting the network
+    python fetch.py --metadata-only  # refresh metadata without fetching stats
 """
 
 import argparse
 import json
 import sqlite3
+import sys
 import urllib.request
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from compression import zstd
@@ -82,7 +86,7 @@ def write_dump(path: Path, content: str, level: int = COMPRESSION_LEVEL) -> None
 
 def fetch_json(url: str) -> str:
     req = urllib.request.Request(url)
-    with urllib.request.urlopen(req) as response:
+    with urllib.request.urlopen(req, timeout=60) as response:
         return response.read().decode("utf-8")
 
 
@@ -154,7 +158,74 @@ def init_db(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_counts_name_id ON counts (name_id);
         """
     )
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(names)")}
+    for column in ("display_name", "description", "homepage", "metadata_refreshed_at"):
+        if column not in columns:
+            conn.execute(f"ALTER TABLE names ADD COLUMN {column} TEXT")
     conn.commit()
+
+
+def metadata_index(items: object, kind: KindSpec) -> dict[str, list[dict]]:
+    """Validate a source and index exact identities and aliases within its kind."""
+    if not isinstance(items, list) or not items:
+        raise ValueError(f"Empty or invalid {kind.name} metadata response")
+    index: dict[str, list[dict]] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            raise ValueError(f"Invalid {kind.name} metadata item")
+        name = item.get("token" if kind.name == "cask" else "name")
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"Missing {kind.name} package identity")
+        for field in ("desc", "homepage", "tap", "full_name", "full_token"):
+            if item.get(field) is not None and not isinstance(item[field], str):
+                raise ValueError(f"Invalid {field} for {name}")
+        display = item.get("name")
+        if kind.name == "cask" and (
+            not isinstance(display, list) or not all(isinstance(v, str) for v in display)
+        ):
+            raise ValueError(f"Invalid display names for {name}")
+        keys = {name, item.get("full_name"), item.get("full_token")}
+        for field in ("aliases", "oldnames", "old_tokens"):
+            values = item.get(field, [])
+            if not isinstance(values, list) or not all(isinstance(v, str) for v in values):
+                raise ValueError(f"Invalid {field} for {name}")
+            keys.update(values)
+        if item.get("tap"):
+            keys.add(f"{item['tap']}/{name}")
+        for key in keys - {None, ""}:
+            index.setdefault(key, []).append(item)
+    return index
+
+
+def refresh_metadata(conn: sqlite3.Connection) -> int:
+    """Fetch both sources before writing; failures leave previous metadata intact."""
+    sources = {
+        kind.kind_id: json.loads(fetch_json(f"https://formulae.brew.sh/api/{kind.name}.json"))
+        for kind in KIND_SPECS
+    }
+    refreshed_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return update_metadata(conn, sources, refreshed_at)
+
+
+def update_metadata(conn: sqlite3.Connection, sources: dict, refreshed_at: str) -> int:
+    """Validate both sources and atomically apply uniquely matched metadata."""
+    indexes = {kind.kind_id: metadata_index(sources[kind.kind_id], kind) for kind in KIND_SPECS}
+    rows = []
+    for name_id, kind_id, name in conn.execute("SELECT name_id, kind_id, name FROM names"):
+        matches = indexes[kind_id].get(name, [])
+        if len(matches) != 1:
+            continue  # Never guess for absent packages or ambiguous aliases.
+        item = matches[0]
+        display = item["name"]
+        if isinstance(display, list):
+            display = ", ".join(display)
+        rows.append((display, item.get("desc"), item.get("homepage"), refreshed_at, name_id))
+    with conn:
+        conn.executemany(
+            """UPDATE names SET display_name=?, description=?, homepage=?,
+               metadata_refreshed_at=? WHERE name_id=?""", rows
+        )
+    return len(rows)
 
 
 def load_name_map(conn: sqlite3.Connection) -> dict[tuple[int, str], int]:
@@ -208,6 +279,7 @@ def upsert_counts(
         INSERT INTO counts (date, kind_id, name_id, count)
         VALUES (?, ?, ?, ?)
         ON CONFLICT (date, kind_id, name_id) DO UPDATE SET count = excluded.count
+        WHERE counts.count <> excluded.count
         """,
         rows,
     )
@@ -267,7 +339,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Fetch Homebrew analytics into SQLite."
     )
-    parser.add_argument(
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--metadata-only", action="store_true", help="Refresh metadata without fetching analytics.")
+    modes.add_argument(
         "--backfill",
         action="store_true",
         help="Rebuild counts from every existing dump instead of fetching new data.",
@@ -296,8 +370,14 @@ def main() -> None:
         init_db(conn)
         if args.backfill:
             run_backfill(conn, DUMPS_DIR, args.min_installs)
+        elif args.metadata_only:
+            print(f"Refreshed metadata for {refresh_metadata(conn)} packages")
         else:
             run_fetch(conn, DUMPS_DIR, args.min_installs)
+            try:
+                print(f"Refreshed metadata for {refresh_metadata(conn)} packages")
+            except (OSError, ValueError) as error:
+                print(f"Metadata refresh failed; retained previous metadata: {error}", file=sys.stderr)
     finally:
         conn.close()
 

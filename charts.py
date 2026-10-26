@@ -1,13 +1,7 @@
-import functools
-import hashlib
 import json
-import pickle
 import re
 import sqlite3
-import tempfile
-import time
 import unicodedata
-import urllib.request
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -18,59 +12,47 @@ from typing import Any
 import pandas as pd
 from pandas.core.frame import DataFrame
 
-SECONDS_PER_MINUTE = 60
-MINUTES_PER_HOUR = 60
-HOURS_PER_DAY = 24
-SECONDS_PER_HOUR = SECONDS_PER_MINUTE * MINUTES_PER_HOUR
-DESCRIPTION_CACHE_TTL_SECONDS = HOURS_PER_DAY * SECONDS_PER_HOUR
-DESCRIPTION_CACHE_DIR = Path(tempfile.gettempdir()) / "toth-cache"
-
-DB_PATH = "brew_stats.db"
-conn = sqlite3.connect(DB_PATH)
+DB_PATH = Path(__file__).resolve().parent / "brew_stats.db"
+conn = sqlite3.connect(f"{DB_PATH.as_uri()}?mode=ro", uri=True)
 DATA_DATE_FORMAT = "%Y%m%d"
 
 QUERY_LATEST_DATE = "SELECT MAX(date) AS latest_date FROM counts"
 
 QUERY_TEMPLATE = """
 WITH cleaned AS (
-    SELECT
-        counts.date,
-        counts.count,
-        substr(names.name, 1, instr(names.name || '@', '@') - 1) AS no_at
-    FROM counts
-    JOIN names ON names.name_id = counts.name_id
-    WHERE names.name {}
-),
-normalized AS (
-    SELECT
-        date,
-        count,
-        replace(no_at, rtrim(no_at, replace(no_at, '/', '')), '') AS name
-    FROM cleaned
+    SELECT counts.date, counts.count, names.name_id, names.kind_id,
+        substr(names.name, 1, instr(names.name || '@', '@') - 1) AS name
+    FROM counts JOIN names ON names.name_id = counts.name_id
+    WHERE {}
 ),
 merged AS (
-    SELECT date, name, SUM(count) AS count
-    FROM normalized
-    GROUP BY date, name
+    SELECT date, kind_id, name, SUM(count) AS count,
+           GROUP_CONCAT(DISTINCT name_id) AS package_ids
+    FROM cleaned GROUP BY date, kind_id, name
 ),
 top_names AS (
-    SELECT name
-    FROM merged
+    SELECT kind_id, name FROM merged
     WHERE date = (SELECT MAX(date) FROM counts)
-    ORDER BY count DESC, name
-    LIMIT 5
+    ORDER BY count DESC, kind_id, name LIMIT 5
 )
-SELECT date, name, count
+SELECT date,
+    CASE WHEN EXISTS (SELECT 1 FROM merged AS other
+                      WHERE other.name = merged.name AND other.kind_id <> merged.kind_id)
+         THEN name || CASE kind_id WHEN 0 THEN ' (formula)' ELSE ' (cask)' END
+         ELSE name END AS name,
+    count, package_ids
 FROM merged
-WHERE name IN (SELECT name FROM top_names)
+WHERE (kind_id, name) IN (SELECT kind_id, name FROM top_names)
 ORDER BY date, name
 """
+
 
 QUERY_NEW_ENTRIES = """
 WITH ranked AS (
     SELECT
         counts.name_id,
         names.name,
+        names.kind_id,
         counts.date,
         counts.count,
         ROW_NUMBER() OVER (PARTITION BY counts.name_id ORDER BY counts.date DESC) AS rn,
@@ -80,7 +62,10 @@ WITH ranked AS (
     FROM counts
     JOIN names ON names.name_id = counts.name_id
 )
-SELECT date, name, count FROM ranked WHERE rn = 1 AND COALESCE(had_previous_event, 0) = 0 ORDER BY count DESC LIMIT 10;
+SELECT date, name || CASE WHEN EXISTS (
+    SELECT 1 FROM names n WHERE n.name = ranked.name AND n.kind_id <> ranked.kind_id
+) THEN CASE kind_id WHEN 0 THEN ' (formula)' ELSE ' (cask)' END ELSE '' END AS name,
+count, CAST(name_id AS TEXT) AS package_ids FROM ranked WHERE rn = 1 AND COALESCE(had_previous_event, 0) = 0 ORDER BY count DESC LIMIT 10;
 """
 
 QUERY_GAINERS = """
@@ -93,10 +78,14 @@ curr AS (
     SELECT name_id, count FROM counts WHERE date = (SELECT MAX(date) FROM last_two_dates)
 )
 SELECT
-    names.name, ROUND((curr.count - prev.count) * 100.0 / prev.count, 2) AS pct_growth
+    names.name || CASE WHEN EXISTS (
+        SELECT 1 FROM names n WHERE n.name = names.name AND n.kind_id <> names.kind_id
+    ) THEN CASE names.kind_id WHEN 0 THEN ' (formula)' ELSE ' (cask)' END ELSE '' END AS name,
+    CAST(names.name_id AS TEXT) AS package_ids, ROUND((curr.count - prev.count) * 100.0 / prev.count, 2) AS pct_growth
 FROM curr
 JOIN prev  ON prev.name_id = curr.name_id
 JOIN names ON names.name_id = curr.name_id
+WHERE prev.count > 0
 ORDER BY pct_growth DESC
 LIMIT 10;
 """
@@ -166,6 +155,7 @@ def chartjs_record(
     if chart.description is not None:
         record["description"] = chart.description
 
+    record["packages"] = package_metadata(chart)
     return record
 
 
@@ -189,6 +179,9 @@ def _time_series_chart_data(
         raise ValueError(
             "Time-series data must have at most one value per date and category."
         )
+
+    if data.empty:
+        return {"labels": [], "datasets": []}
 
     labels = sorted(data[date_column].unique())
     label_strings = [label.strftime("%Y-%m-%d") for label in labels]
@@ -291,61 +284,48 @@ def _json_value(value: Any) -> int | float:
     return value.item() if hasattr(value, "item") else value
 
 
-def disk_cache(ttl: int, cache_dir: Path):
-    """Cache function results on disk for the requested time-to-live."""
-    cache_dir.mkdir(parents=True, exist_ok=True)
-
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            key = hashlib.sha256(repr((args, kwargs)).encode()).hexdigest()
-            path = cache_dir / key
-
-            if path.exists():
-                age = time.time() - path.stat().st_mtime
-                if age < ttl:
-                    return pickle.loads(path.read_bytes())
-
-            result = func(*args, **kwargs)
-            path.write_bytes(pickle.dumps(result))
-            return result
-
-        return wrapper
-
-    return decorator
-
-
-@functools.cache
-@disk_cache(DESCRIPTION_CACHE_TTL_SECONDS, DESCRIPTION_CACHE_DIR)
 def get_descriptions() -> dict[str, str]:
-    """Fetch Homebrew formula and cask descriptions, keyed by package token."""
-    urls = (
-        "https://formulae.brew.sh/api/formula.json",
-        "https://formulae.brew.sh/api/cask.json",
+    """Compatibility name lookup for notebooks; production queries retain name IDs."""
+    return {name: description for name, description in conn.execute(
+        "SELECT name, description FROM names WHERE description IS NOT NULL ORDER BY kind_id"
+    )}
+
+
+def search_package_ids(desc: str) -> list[int]:
+    pattern = _description_query_pattern(desc)
+    return [name_id for name_id, description in conn.execute(
+        "SELECT name_id, description FROM names WHERE description IS NOT NULL"
+    ) if pattern.search(description)]
+
+
+def package_ids_for_names(names) -> list[int]:
+    return [row[0] for row in conn.execute(
+        "SELECT name_id FROM names WHERE name IN (" + ",".join("?" for _ in names) + ")", names
+    )]
+
+
+def package_filter(packages) -> str:
+    """Match description search IDs precisely; allow explicitly curated names too."""
+    ids = [str(value) for value in packages if isinstance(value, int)]
+    names = ["'" + value.replace("'", "''") + "'" for value in packages if isinstance(value, str)]
+    return f"(names.name_id IN ({','.join(ids)}) OR names.name IN ({','.join(names)}))"
+
+
+def package_metadata(chart: ChartData) -> dict[str, list[dict]]:
+    if "package_ids" not in chart.df:
+        return {}
+    rows = conn.execute(
+        "SELECT name_id, kind_id, name, display_name, description, homepage, metadata_refreshed_at FROM names"
     )
-    descriptions: dict[str, str] = {}
-
-    for url in urls:
-        req = urllib.request.Request(
-            url, headers={"User-Agent": "Mozilla/5.0 (Python Script)"}
-        )
-        with urllib.request.urlopen(req) as response:
-            items = json.loads(response.read().decode("utf-8"))
-
-        for item in items:
-            name = item.get("token") or item.get("name")
-            description = item.get("desc")
-            if isinstance(name, list):
-                name = next((value for value in name if value), None)
-            if (
-                isinstance(name, str)
-                and name
-                and isinstance(description, str)
-                and description
-            ):
-                descriptions[name] = description
-
-    return descriptions
+    by_id = {str(row[0]): dict(zip(
+        ("kind", "name", "display_name", "description", "homepage", "metadata_refreshed_at"),
+        (("formula", "cask")[row[1]], *row[2:])
+    )) for row in rows}
+    result = {}
+    for label, group in chart.df.groupby(chart.category_column):
+        ids = {value for cell in group["package_ids"] for value in str(cell).split(",")}
+        result[str(label)] = [by_id[value] for value in sorted(ids, key=int) if value in by_id]
+    return result
 
 
 def _description_query_pattern(query: str) -> re.Pattern[str]:
@@ -357,7 +337,7 @@ def _description_query_pattern(query: str) -> re.Pattern[str]:
 
 
 def brew_search(desc: str) -> list[str]:
-    """Return package names whose cached Homebrew descriptions match ``desc``."""
+    """Return package names whose stored Homebrew descriptions match ``desc``."""
     pattern = _description_query_pattern(desc)
     return [
         name
@@ -396,24 +376,22 @@ def get_chart_data() -> list[ChartData]:
     )
 
     # --- Code editors ---
-    match_list = ", ".join(
-        f"'{name}'" for name in brew_search(r"/(?i)(?=.*code)(?=.*edit)/")
-    )
+    match_list = package_filter(search_package_ids(r"/(?i)(?=.*code)(?=.*edit)/"))
     chart_data.append(
         ChartData(
             title="Code editors",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
             description="Packages whose descriptions indicate that they are used for editing code. With coding harnesses becoming more capable, does coding move away from the editor?",
         )
     )
 
     # --- coding harnesses ---
     agents = set(
-        brew_search(
+        search_package_ids(
             r"/(?i)\A(?!.*(?:menu bar|status|pet|memory upgrade)).*\bcod(e|ing)\b\s\b(agent|assistant)\b.*/"
         )
-        + brew_search(
+        + search_package_ids(
             r"/(?i)\A(?!.*(?:review|documentation|language|workout|usage tracker|manage)).*\bAI\b.*(?:programming|code)/"
         )
     )
@@ -427,149 +405,148 @@ def get_chart_data() -> list[ChartData]:
             "pi-coding-agent",  # AI agent toolkit
         ]
     )
-    match_list = ", ".join(f"'{name}'" for name in agents)
+    match_list = package_filter(agents)
     chart_data.append(
         ChartData(
             title="Coding harnesses",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
             description="AI coding tools designed to work on code, rather than just help you write it.",
         )
     )
 
     # --- AI agent ---
     pkgs = set(
-        brew_search(
+        search_package_ids(
             r"/(?i)^(?!.*(?:operator|cod(e|ing)|IDE|scanner|orchestrator|command|container|manage(r)?)).*\bai (agent|assistant)\b/"
         )
-        + brew_search("agent runtime")
+        + search_package_ids("agent runtime")
     )
-    pkgs -= {"google-gemini"}
-    match_list = ", ".join(
-        f"'{name}'"
-        for name in pkgs
-        if not any(keyword in str(name) for keyword in ["coding", "code"])
-    )
+    pkgs.difference_update(package_ids_for_names(["google-gemini"]))
+    pkgs.difference_update(row[0] for row in conn.execute(
+        "SELECT name_id FROM names WHERE name LIKE '%coding%' OR name LIKE '%code%'"
+    ))
+    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="AI agents",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
             description="AI assistants that can use tools, manage tasks and work towards a goal.",
         )
     )
 
     # --- LLM runners ---
     pkgs = set(
-        brew_search("/(?i)^(?!.*(?:token|dictation)).*LLM.*/")
-        + brew_search("/(?i)^.*offline ai.*/")
-        + brew_search("/(?i)^(?!.*token).*large language model.*/")
+        search_package_ids("/(?i)^(?!.*(?:token|dictation)).*LLM.*/")
+        + search_package_ids("/(?i)^.*offline ai.*/")
+        + search_package_ids("/(?i)^(?!.*token).*large language model.*/")
         + ["mlx"]
     )
-    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="LLM runners",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
             description="Tools for downloading, running and interacting with large language models locally.",
         )
     )
 
     # --- container runners ---
-    pkgs = brew_search(
+    pkgs = search_package_ids(
         "/(?i)(?=.*container)(?=.*(build|run(ner|times?)?|desktop|gui|manag(e|ing)))/"
     )
-    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="Container runners",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
             description="Tools for building, running and managing containers — isolated environments for running software and its dependencies.",
         )
     )
 
     # --- languages and runtimes ---
     pkgs = set(
-        brew_search(
+        search_package_ids(
             r"/(?i)(?=.*(?:programming|compiler|interpreter|scripting|sdk))(?=.*language)/"
         )
-        + brew_search(r"/(?i)(?=.*javascript)(?=.*runtime)/")
+        + search_package_ids(r"/(?i)(?=.*javascript)(?=.*runtime)/")
         + ["rust", "typescript"]
     )
-    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="Languages and runtimes",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
             description="Programming languages, compilers, interpreters and runtimes used to write and run software.",
         )
     )
 
     # --- javascript runtimes ---
-    pkgs = brew_search("/(?i)(?=.*javascript)(?=.*runtime)/")
-    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    pkgs = search_package_ids("/(?i)(?=.*javascript)(?=.*runtime)/")
+    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="JavaScript runtimes",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
             description="Runtimes for executing JavaScript outside the browser.",
         )
     )
 
     # --- python package managers ---
     pkgs = set(
-        brew_search("python package")
-        + brew_search("python dependency")
-        # + brew_search("python environment")
-        + brew_search("conda")
+        search_package_ids("python package")
+        + search_package_ids("python dependency")
+        # + search_package_ids("python environment")
+        + search_package_ids("conda")
         + ["pixi"]
     )
-    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="Python package managers",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
             description="Tools for installing and managing Python tools, packages and their dependencies.",
         )
     )
 
     # -- static code analysers and linters ---
     pkgs = set(
-        brew_search(
+        search_package_ids(
             r"/(?i)^(?!.*(claude code|colors|prose|visualization|generator|morphological|compile|driver|computation|statically typed))(?=.*(static|analy[sz]e))(?=.*(\bcode\b|python|php|python|java|swift|Elixir|script|logic))/"
         )
-        + brew_search(r"/(?i)^(?!.*(prose|certificate|preview)).*\blinter\b/")
+        + search_package_ids(r"/(?i)^(?!.*(prose|certificate|preview)).*\blinter\b/")
     )
-    pkgs.difference_update(["roapi", "sigrok-cli", "memoryanalyzer"])
+    pkgs.difference_update(package_ids_for_names(["roapi", "sigrok-cli", "memoryanalyzer"]))
 
-    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="Code analyzers and linters",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
             description="Code, configuration, or infrastructure definition inspection to identify potential bugs, security issues, and rule violations without executing them. Includes linters, static analyzers, and security-focused analyzers.",
         )
     )
 
     # --- terminal emulators over time ---
-    match_list = ", ".join(f"'{name}'" for name in brew_search("terminal emulator"))
+    match_list = package_filter(search_package_ids("terminal emulator"))
     chart_data.append(
         ChartData(
             title="Terminal emulators",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
             description="Alternative terminals that offer more than the OS default. Improved UI and features for managing multiple or remote sessions.",
         )
     )
 
     # --- shells ---
-    pkgs = brew_search("/(?i)(?=.*(?:unix|posix|berkeley))(?=.*shell)/")
+    pkgs = search_package_ids("/(?i)(?=.*(?:unix|posix|berkeley))(?=.*shell)/")
 
     outliers = """
     nushell: Modern shell for the GitHub era
@@ -579,38 +556,38 @@ def get_chart_data() -> list[ChartData]:
     """
     pkgs += [pkg for line in outliers.splitlines() if (pkg := line.split(":")[0])]
 
-    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="Command-line shells",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
             description="Shells for running commands, scripting tasks and interacting with the operating system.",
         )
     )
 
     # --- search tools ---
-    pkgs = set(brew_search("/(?i)^(?!.*(?:backend)).*search|find.*/"))
-    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    pkgs = set(search_package_ids("/(?i)^(?!.*(?:backend)).*search|find.*/"))
+    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="Search tools",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
             description="Command-line tools for finding files, searching code and filtering results. Often faster and more convenient than the traditional Unix tools.",
         )
     )
 
     # --- compression tools ---
     pkgs = set(
-        brew_search("/(?i)^(?!.*(?:image)).*compression.*/") + brew_search("archiver")
+        search_package_ids("/(?i)^(?!.*(?:image)).*compression.*/") + search_package_ids("archiver")
     )
-    match_list = ", ".join(f"'{name}'" for name in pkgs)
+    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="Compression tools",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn),
+            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
             description="Tools for compressing, decompressing, archiving, efficiently storing and moving files around.",
         )
     )
@@ -620,7 +597,7 @@ def get_chart_data() -> list[ChartData]:
         ChartData(
             title="Fonts",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format("LIKE 'font-%'"), conn),
+            df=pd.read_sql_query(QUERY_TEMPLATE.format("names.name LIKE 'font-%'"), conn),
             description="Developer and terminal fonts, including monospaced fonts with extra glyphs for richer prompts and text interfaces.",
         )
     )
@@ -647,4 +624,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        conn.close()

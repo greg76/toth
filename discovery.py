@@ -103,7 +103,7 @@ powershell: Command-line shell and scripting language
 pkgs += [pkg for line in outliers.splitlines() if (pkg := line.split(":")[0])]
 
 match_list = ", ".join(f"'{name}'" for name in pkgs)
-df = pd.read_sql_query(QUERY_TEMPLATE.format(f"IN ({match_list})"), conn)
+df = pd.read_sql_query(QUERY_TEMPLATE.format(f"names.name IN ({match_list})"), conn)
 top_trend(df, "shells")
 
 

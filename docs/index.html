@@ -143,6 +143,68 @@
       min-width: 0;
     }
 
+    .chart-panel { min-width: 0; }
+    .chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px 16px;
+      margin-bottom: 12px;
+    }
+    .package-label {
+      border: 0;
+      padding: 3px 0;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .package-label:focus-visible, .package-popover a:focus-visible {
+      outline: 2px solid var(--hop);
+      outline-offset: 2px;
+    }
+    .legend-dot {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      margin-right: 7px;
+      border-radius: 50%;
+    }
+    .package-label[aria-pressed="false"] { text-decoration: line-through; }
+    .bar-labels { position: absolute; inset: 0; pointer-events: none; }
+    .bar-labels .package-label {
+      position: absolute;
+      transform: translateY(-50%);
+      height: 24px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: right;
+      background: var(--card);
+      pointer-events: auto;
+    }
+    .package-popover {
+      position: fixed;
+      z-index: 10;
+      width: min(360px, calc(100vw - 24px));
+      max-height: min(360px, 60vh);
+      overflow-y: auto;
+      padding: 16px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 8px 28px #17191426;
+      font-size: 13px;
+      overflow-wrap: anywhere;
+      pointer-events: auto;
+    }
+    .package-popover h3 { margin: 0 0 8px; font-size: 15px; }
+    .package-popover p { margin: 5px 0; color: var(--muted); }
+    .package-popover section + section { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px; }
+    .package-popover a { color: var(--hop-dark); }
+    .chart-help { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
+
     .loading,
     .error {
       margin: 0;
@@ -306,6 +368,7 @@
       maintainAspectRatio: false,
       plugins: {
         legend: {
+          display: false,
           labels: {
             usePointStyle: true,
             pointStyle: "circle",
@@ -502,6 +565,167 @@
       }));
     }
 
+    function safeHomepage(value) {
+      try {
+        const url = new URL(value);
+        return ["https:", "http:"].includes(url.protocol) ? url.href : null;
+      } catch {
+        return null;
+      }
+    }
+
+    let closePackageDetails;
+
+    function packageDetails(chart, panel) {
+      const popup = document.createElement("div");
+      popup.className = "package-popover";
+      popup.id = `${chart.id}-package-details`;
+      popup.setAttribute("role", "region");
+      popup.setAttribute("aria-label", "Package details");
+      popup.hidden = true;
+      panel.append(popup);
+      let activeButton;
+      let closeTimer;
+
+      function hide() {
+        clearTimeout(closeTimer);
+        popup.hidden = true;
+        if (closePackageDetails === hide) closePackageDetails = null;
+        activeButton?.setAttribute("aria-expanded", "false");
+      }
+
+      function scheduleHide() {
+        clearTimeout(closeTimer);
+        closeTimer = setTimeout(() => {
+          if (!popup.matches(":hover") && !popup.contains(document.activeElement) &&
+              !activeButton?.matches(":hover") && activeButton !== document.activeElement) hide();
+        }, 180);
+      }
+
+      function show(button, label) {
+        clearTimeout(closeTimer);
+        if (closePackageDetails !== hide) closePackageDetails?.();
+        closePackageDetails = hide;
+        activeButton?.setAttribute("aria-expanded", "false");
+        activeButton = button;
+        button.setAttribute("aria-expanded", "true");
+        button.after(popup);
+        popup.replaceChildren();
+        const heading = document.createElement("h3");
+        heading.textContent = label;
+        popup.append(heading);
+        const packages = chart.packages?.[label] || [{ name: label }];
+        packages.forEach(pkg => {
+          const section = document.createElement("section");
+          const name = document.createElement("strong");
+          name.textContent = pkg.display_name && pkg.display_name !== pkg.name
+            ? `${pkg.display_name} (${pkg.name})` : pkg.name;
+          if (packages.length > 1 || (pkg.display_name && pkg.display_name !== pkg.name)) section.append(name);
+          if (pkg.kind) {
+            const kind = document.createElement("p");
+            kind.textContent = pkg.kind;
+            section.append(kind);
+          }
+          const description = document.createElement("p");
+          description.textContent = pkg.description || "Description unavailable.";
+          section.append(description);
+          const homepage = safeHomepage(pkg.homepage);
+          if (homepage) {
+            const link = document.createElement("a");
+            link.href = homepage;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.textContent = "Visit website ↗";
+            section.append(link);
+          }
+          popup.append(section);
+        });
+        popup.hidden = false;
+        const rect = button.getBoundingClientRect();
+        const width = popup.offsetWidth;
+        const height = popup.offsetHeight;
+        popup.style.left = `${Math.max(12, Math.min(rect.left, window.innerWidth - width - 12))}px`;
+        popup.style.top = `${Math.max(12, rect.bottom + height + 8 < window.innerHeight
+          ? rect.bottom + 8 : rect.top - height - 8)}px`;
+      }
+
+      popup.addEventListener("pointerenter", () => clearTimeout(closeTimer));
+      popup.addEventListener("pointerleave", scheduleHide);
+      popup.addEventListener("focusout", scheduleHide);
+      panel.addEventListener("keydown", event => {
+        if (event.key === "Escape" && !popup.hidden) {
+          activeButton?.focus();
+          hide();
+        }
+      });
+      document.addEventListener("pointerdown", event => {
+        if (!popup.contains(event.target) && event.target !== activeButton &&
+            !activeButton?.contains(event.target)) hide();
+      });
+      window.addEventListener("scroll", hide, { passive: true });
+      window.addEventListener("resize", hide);
+
+      return (label, color) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "package-label";
+        button.setAttribute("aria-label", `${label}: package details`);
+        button.setAttribute("aria-controls", popup.id);
+        button.setAttribute("aria-expanded", "false");
+        if (color) {
+          const dot = document.createElement("span");
+          dot.className = "legend-dot";
+          dot.style.backgroundColor = color;
+          button.append(dot);
+        }
+        button.append(document.createTextNode(shortenCategoryLabel(label)));
+        button.addEventListener("pointerenter", () => show(button, label));
+        button.addEventListener("pointerleave", scheduleHide);
+        button.addEventListener("focus", () => show(button, label));
+        button.addEventListener("focusout", scheduleHide);
+        button.addEventListener("click", () => show(button, label));
+        return button;
+      };
+    }
+
+    function packageLabelsPlugin(chart, wrapper, legend, makeButton) {
+      const isBar = chart.config.type === "bar";
+      const labels = isBar ? chart.config.data.labels : chart.config.data.datasets.map(d => d.label);
+      const buttons = labels.map((label, index) => {
+        const button = makeButton(label, isBar ? null :
+          chart.config.data.datasets[index].borderColor || COLORS[index % COLORS.length]);
+        if (!isBar) {
+          button.setAttribute("aria-pressed", "true");
+          button.setAttribute("aria-label", `${label}: toggle line; hover or focus for package details`);
+          button.addEventListener("click", () => {
+            const instance = Chart.getChart(wrapper.querySelector("canvas"));
+            const visible = instance.isDatasetVisible(index);
+            instance.setDatasetVisibility(index, !visible);
+            button.setAttribute("aria-pressed", String(!visible));
+            instance.update();
+          });
+        }
+        legend.append(button);
+        return button;
+      });
+      return {
+        id: "packageLabels",
+        afterLayout(instance) {
+          if (!isBar) return;
+          const scale = instance.scales.y;
+          buttons.forEach(button => { button.hidden = true; });
+          scale.ticks.forEach((tick, tickIndex) => {
+            const button = buttons[tick.value];
+            if (!button) return;
+            button.hidden = false;
+            button.style.left = `${scale.left}px`;
+            button.style.width = `${Math.max(0, scale.width - 10)}px`;
+            button.style.top = `${scale.getPixelForTick(tickIndex)}px`;
+          });
+        }
+      };
+    }
+
     function createChartCard(chart, index) {
       const card = document.createElement("article");
       card.className = "chart-card";
@@ -533,8 +757,22 @@
       canvas.setAttribute("aria-label", chart.title);
       wrapper.append(canvas);
 
-      card.append(copy, wrapper);
-      return { card, canvas };
+      const panel = document.createElement("div");
+      panel.className = "chart-panel";
+      const help = document.createElement("p");
+      help.className = "chart-help";
+      help.textContent = "Hover, focus or tap a package name for details and its website.";
+      const legend = document.createElement("div");
+      legend.className = chart.config.type === "bar" ? "bar-labels" : "chart-legend";
+      if (chart.config.type === "bar") {
+        wrapper.append(legend);
+        panel.append(help, wrapper);
+      } else {
+        panel.append(help, legend, wrapper);
+      }
+      const makeButton = packageDetails(chart, panel);
+      card.append(copy, panel);
+      return { card, canvas, wrapper, legend, makeButton };
     }
 
     function renderCharts(charts) {
@@ -545,7 +783,7 @@
       renderedCharts.forEach(({ card }) => fragment.append(card));
       chartList.replaceChildren(fragment);
 
-      renderedCharts.forEach(({ canvas }, index) => {
+      renderedCharts.forEach(({ canvas, wrapper, legend, makeButton }, index) => {
         const chart = charts[index];
         new Chart(canvas, {
           type: chart.config.type,
@@ -553,7 +791,8 @@
             ...chart.config.data,
             datasets: styledDatasets(chart)
           },
-          options: mergeOptions(chart)
+          options: mergeOptions(chart),
+          plugins: [packageLabelsPlugin(chart, wrapper, legend, makeButton)]
         });
       });
     }

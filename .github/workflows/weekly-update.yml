@@ -49,26 +49,26 @@ jobs:
           assert any(dumps.glob('*formula.zst')) and any(dumps.glob('*cask.zst')),
           'Commit the existing dumps/*.zst snapshots so the update can rebuild history.'"
 
-      - name: Rebuild database from saved snapshots
-        if: github.event_name == 'schedule' || inputs.mode != 'publish'
+      - name: Restore counts from saved snapshots
+        if: inputs.mode == 'rebuild'
         run: |
           python fetch.py --backfill
 
-      - name: Fetch latest analytics snapshot
+      - name: Fetch latest analytics and package metadata
         if: github.event_name == 'schedule' || inputs.mode == 'update'
         run: python fetch.py
 
-      - name: Generate charts from the rebuilt database
+      - name: Generate charts from the database
         if: github.event_name == 'schedule' || inputs.mode != 'publish'
         run: |
           python charts.py > docs/charts.json
 
-      - name: Commit updated snapshots and chart data
+      - name: Commit updated database, snapshots and chart data
         if: github.event_name == 'schedule' || inputs.mode != 'publish'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A -- dumps/ docs/charts.json
+          git add -A -- brew_stats.db dumps/ docs/charts.json
           if git diff --cached --quiet; then
             echo "No data changes to commit."
           else

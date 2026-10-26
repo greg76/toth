@@ -1,5 +1,7 @@
 .venv/
 .DS_Store
-brew_stats.db
 __pycache__/
 clustering_runs/
+brew_stats.db-journal
+brew_stats.db-wal
+brew_stats.db-shm

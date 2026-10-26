@@ -99,14 +99,11 @@ def baseline(output, db):
 
     snapshot_path = output / "packages.json"
     if not snapshot_path.exists():
-        # Preserve the notebook's existing name-only lookup for a comparable baseline.
-        from charts import get_descriptions
-
-        descriptions = get_descriptions()
+        # Existing packages.json snapshots remain frozen; new runs use stored metadata.
         with sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True) as connection:
             date = connection.execute("SELECT MAX(date) FROM counts").fetchone()[0]
             rows = connection.execute(
-                """SELECT names.name_id, names.name, names.kind_id, counts.count
+                """SELECT names.name_id, names.name, names.kind_id, counts.count, names.description
                 FROM counts JOIN names ON names.name_id = counts.name_id
                 WHERE counts.date = ? ORDER BY counts.count DESC, names.name_id LIMIT 500""",
                 (date,),
@@ -114,8 +111,8 @@ def baseline(output, db):
         packages = [
             {"id": f"{PACKAGE_TYPES[kind]}:{name}", "name": name,
              "package_type": PACKAGE_TYPES[kind], "count": count,
-             "description": (descriptions.get(name) or "").strip()}
-            for _, name, kind, count in rows
+             "description": (description or "").strip()}
+            for _, name, kind, count, description in rows
         ]
         write_json(snapshot_path, {"analytics_date": date, "packages": packages})
     snapshot = read_json(snapshot_path)
