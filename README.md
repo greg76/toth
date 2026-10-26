@@ -57,7 +57,7 @@ Generate the [charts.json](docs/charts.json) export used to build the chart card
 python charts.py > docs/charts.json
 ```
 
-Package names in bar labels and line-chart legends show their full name, description and website link on hover, keyboard focus or tap. Clicking a legend name still toggles its line. Missing metadata falls back to the full analytics name. Combined version series list the underlying packages separately.
+Package names in bar labels and line-chart legends show a popup on hover, keyboard focus or tap. The popup contains the short package name, linked to its website when available, and a description when present. Clicking a legend name still toggles its line. Combined version series use the base package metadata when available; otherwise they show only metadata shared by all versions.
 
 Chart generation and notebook description searches read SQLite without network access. If the database is lost, stats dumps restore counts; metadata must be recovered from a committed database or fetched again.
 

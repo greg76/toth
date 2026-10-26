@@ -199,9 +199,8 @@
       overflow-wrap: anywhere;
       pointer-events: auto;
     }
-    .package-popover h3 { margin: 0 0 8px; font-size: 15px; }
-    .package-popover p { margin: 5px 0; color: var(--muted); }
-    .package-popover section + section { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px; }
+    .package-popover h3 { margin: 0; font-size: 15px; }
+    .package-popover p { margin: 5px 0 0; color: var(--muted); }
     .package-popover a { color: var(--hop-dark); }
     .chart-help { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
 
@@ -611,35 +610,37 @@
         button.setAttribute("aria-expanded", "true");
         button.after(popup);
         popup.replaceChildren();
+        const packageName = label.replace(/ \((?:formula|cask)\)$/, "");
+        const packages = chart.packages?.[label] || [];
+        const shared = field => packages.every(pkg => pkg[field] === packages[0]?.[field])
+          ? packages[0]?.[field] : null;
+        const pkg = packages.find(pkg => pkg.name === packageName) || {
+          description: shared("description"),
+          homepage: shared("homepage")
+        };
         const heading = document.createElement("h3");
-        heading.textContent = label;
+        const name = packageName.split("/").pop();
+        const homepage = safeHomepage(pkg.homepage);
+        if (homepage) {
+          const link = document.createElement("a");
+          link.href = homepage;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = name;
+          const icon = document.createElement("span");
+          icon.setAttribute("aria-hidden", "true");
+          icon.textContent = " ↗";
+          link.append(icon);
+          heading.append(link);
+        } else {
+          heading.textContent = name;
+        }
         popup.append(heading);
-        const packages = chart.packages?.[label] || [{ name: label }];
-        packages.forEach(pkg => {
-          const section = document.createElement("section");
-          const name = document.createElement("strong");
-          name.textContent = pkg.display_name && pkg.display_name !== pkg.name
-            ? `${pkg.display_name} (${pkg.name})` : pkg.name;
-          if (packages.length > 1 || (pkg.display_name && pkg.display_name !== pkg.name)) section.append(name);
-          if (pkg.kind) {
-            const kind = document.createElement("p");
-            kind.textContent = pkg.kind;
-            section.append(kind);
-          }
+        if (pkg.description) {
           const description = document.createElement("p");
-          description.textContent = pkg.description || "Description unavailable.";
-          section.append(description);
-          const homepage = safeHomepage(pkg.homepage);
-          if (homepage) {
-            const link = document.createElement("a");
-            link.href = homepage;
-            link.target = "_blank";
-            link.rel = "noopener noreferrer";
-            link.textContent = "Visit website ↗";
-            section.append(link);
-          }
-          popup.append(section);
-        });
+          description.textContent = pkg.description;
+          popup.append(description);
+        }
         popup.hidden = false;
         const rect = button.getBoundingClientRect();
         const width = popup.offsetWidth;
