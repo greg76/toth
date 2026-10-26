@@ -1,0 +1,7 @@
+[
+  {"left": "formula:postgresql", "right": "formula:mysql", "related": "yes", "source": "user_confirmed_conversation", "reason": "Relational databases"},
+  {"left": "formula:rustup", "right": "formula:pyenv", "related": "yes", "source": "user_confirmed_conversation", "reason": "Manage language or toolchain versions"},
+  {"left": "formula:ruff", "right": "formula:uv", "related": "no", "source": "user_confirmed_conversation", "reason": "Linting versus dependency management"},
+  {"left": "formula:docker", "right": "formula:virtualenv", "related": "no", "source": "user_confirmed_conversation", "reason": "Containers versus Python environments"},
+  {"left": "formula:openssl", "right": "formula:openvpn", "related": "no", "source": "user_confirmed_conversation", "reason": "Cryptographic library versus VPN application"}
+]

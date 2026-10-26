@@ -2,6 +2,13 @@
 
 Implementation handoff, 20 October 2026.
 
+Execution started: the baseline, metadata audit, and 50-package README pilot have
+run. Text and model comparisons, family-aware evaluation, selective matching,
+and the grouping-method comparison are complete. Independent final validation
+remains open. Refer to [CLUSTERING_RECOMMENDATION.md](CLUSTERING_RECOMMENDATION.md)
+for the current direction and to
+[CLUSTERING_PROGRESS.md](CLUSTERING_PROGRESS.md) for results and review artifacts.
+
 ## Problem
 
 We want to discover packages with related purposes. Short descriptions, missing metadata, and a distorted 2D map currently make the groups difficult to trust.
