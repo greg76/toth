@@ -19,6 +19,7 @@ import urllib.parse
 import urllib.request
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 from pathlib import Path
 
 MODEL = "sentence-transformers/all-MiniLM-L6-v2"
@@ -294,12 +295,39 @@ SKIP_SECTIONS = re.compile(
 )
 
 
+class ReadmeHTMLParser(HTMLParser):
+    """Extract text while excluding comments and pre/script contents."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=False)
+        self.parts = []
+        self.skipped_tags = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in {"pre", "script"}:
+            self.skipped_tags.append(tag)
+
+    def handle_endtag(self, tag):
+        if self.skipped_tags and tag == self.skipped_tags[-1]:
+            self.skipped_tags.pop()
+
+    def handle_data(self, data):
+        if not self.skipped_tags:
+            self.parts.append(data)
+
+    def handle_entityref(self, name):
+        self.handle_data(f"&{name};")
+
+    def handle_charref(self, name):
+        self.handle_data(f"&#{name};")
+
+
 def readme_prose(markdown):
-    """Heuristic extraction; exported excerpts still require semantic review."""
-    markdown = re.sub(r"<!--.*?-->", "", markdown, flags=re.S)
-    markdown = re.sub(r"<pre\b.*?</pre>", "", markdown, flags=re.S | re.I)
-    markdown = re.sub(r"<script\b.*?</script>", "", markdown, flags=re.S | re.I)
-    markdown = re.sub(r"<[^>]+>", "", markdown, flags=re.S)
+    """Extract prose for review and embeddings; not an HTML sanitizer."""
+    parser = ReadmeHTMLParser()
+    parser.feed(markdown)
+    parser.close()
+    markdown = "".join(parser.parts)
     # Removing images first also removes the inner image in linked badges.
     markdown = re.sub(r"!\[[^]]*\]\([^)]*\)", "", markdown)
     markdown = re.sub(

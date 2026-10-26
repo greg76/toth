@@ -76,6 +76,27 @@ MIT
         prose = readme_prose("<!-- hidden -->\n<pre>build commands</pre>\n<p>A search tool &amp; indexer.</p>")
         self.assertEqual(prose, "A search tool & indexer.")
 
+    def test_script_closing_tag_variants_are_removed(self):
+        for closing in ["</script>", "</script >", "</ScRiPt\n>", '</script ignored="value">']:
+            with self.subTest(closing=closing):
+                prose = readme_prose(f"<SCRIPT>alert(1){closing}\nA search tool.")
+                self.assertEqual(prose, "A search tool.")
+
+    def test_pre_contents_and_nested_markup_are_removed(self):
+        prose = readme_prose('<pre><code>build commands</code><pre>nested</pre></pre >\nA search tool.')
+        self.assertEqual(prose, "A search tool.")
+
+    def test_html_attributes_and_alternative_comment_endings(self):
+        prose = readme_prose('<!-- hidden --!><p title="a > b">A search tool.</p>')
+        self.assertEqual(prose, "A search tool.")
+
+    def test_unclosed_script_contents_are_excluded(self):
+        self.assertEqual(readme_prose("A search tool.\n<script>alert(1)"), "A search tool.")
+
+    def test_html_entities_are_decoded_once(self):
+        self.assertEqual(readme_prose("A tool &amp;amp; &#38; &#x26; indexer."),
+                         "A tool &amp; & & indexer.")
+
     def test_alternative_markdown_headings(self):
         prose = readme_prose("Project\n=======\nA search tool.\nInstallation\n------------\nbrew install project\nFeatures\n--------\nFast queries.")
         self.assertIn("Fast queries", prose)
