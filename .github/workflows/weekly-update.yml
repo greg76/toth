@@ -7,11 +7,10 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Choose whether to fetch data, rebuild from saved snapshots, or only publish the current site.
+        description: Choose whether to fetch fresh data or only publish the committed site files.
         type: choice
         options:
           - update
-          - rebuild
           - publish
         default: update
         required: true
@@ -41,18 +40,6 @@ jobs:
       - name: Install workflow dependencies
         if: github.event_name == 'schedule' || inputs.mode != 'publish'
         run: python -m pip install -r requirements-workflow.txt
-
-      - name: Confirm historical snapshots are present
-        if: github.event_name == 'schedule' || inputs.mode != 'publish'
-        run: >-
-          python -c "from pathlib import Path; dumps = Path('dumps');
-          assert any(dumps.glob('*formula.zst')) and any(dumps.glob('*cask.zst')),
-          'Commit the existing dumps/*.zst snapshots so the update can rebuild history.'"
-
-      - name: Restore counts from saved snapshots
-        if: inputs.mode == 'rebuild'
-        run: |
-          python fetch.py --backfill
 
       - name: Fetch latest analytics and package metadata
         if: github.event_name == 'schedule' || inputs.mode == 'update'

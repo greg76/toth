@@ -22,9 +22,9 @@ The data is based on Homebrew's install analytics, so the numbers represent **in
 
 ## Weekly automation
 
-The [weekly GitHub Actions workflow](.github/workflows/weekly-update.yml) runs every Sunday at 09:17 Europe/Zurich time. From the Actions tab, manual runs can update with fresh analytics, rebuild charts from saved snapshots, or publish the current site without fetching data. It uses Python 3.14 and [requirements-workflow.txt](requirements-workflow.txt), which contains the small dependency set needed to fetch data and generate the site.
+The [weekly GitHub Actions workflow](.github/workflows/weekly-update.yml) runs every Sunday at 09:17 Europe/Zurich time. From the Actions tab, manual runs can update with fresh analytics or publish the committed site files without fetching data. It uses Python 3.14 and [requirements-workflow.txt](requirements-workflow.txt), which contains the small dependency set needed to fetch data and generate the site.
 
-Normal updates incrementally update the committed `brew_stats.db`, fetch the latest statistics and package metadata, generate `docs/charts.json`, and commit the database, changed stats snapshots and chart data before deploying `docs/` to GitHub Pages. Rebuild mode restores counts from saved stats snapshots and regenerates charts without fetching metadata. Publish mode deploys the existing site files. The repository's Pages source must be set to **GitHub Actions**. Keep the existing `.zst` files in `dumps/` committed so runs retain the historical trend data.
+Normal updates incrementally update the committed `brew_stats.db`, fetch the latest statistics and package metadata, generate `docs/charts.json`, and commit the database, changed stats snapshots and chart data before deploying `docs/` to GitHub Pages. Publish mode deploys the existing site files. The repository's Pages source must be set to **GitHub Actions**. Keep the existing `.zst` files in `dumps/` committed so runs retain the historical trend data.
 
 ## Running locally
 
