@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <title>Top of The Hops — Trending Homebrew packages</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -202,7 +203,6 @@
     .package-popover h3 { margin: 0; font-size: 15px; }
     .package-popover p { margin: 5px 0 0; color: var(--muted); }
     .package-popover a { color: var(--hop-dark); }
-    .chart-help { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
 
     .loading,
     .error {
@@ -760,16 +760,13 @@
 
       const panel = document.createElement("div");
       panel.className = "chart-panel";
-      const help = document.createElement("p");
-      help.className = "chart-help";
-      help.textContent = "Hover, focus or tap a package name for details and its website.";
       const legend = document.createElement("div");
       legend.className = chart.config.type === "bar" ? "bar-labels" : "chart-legend";
       if (chart.config.type === "bar") {
         wrapper.append(legend);
-        panel.append(help, wrapper);
+        panel.append(wrapper);
       } else {
-        panel.append(help, legend, wrapper);
+        panel.append(legend, wrapper);
       }
       const makeButton = packageDetails(chart, panel);
       card.append(copy, panel);
