@@ -1,12 +1,8 @@
 # %% imports, constants, helper functions
 
-import json
-from pathlib import Path
-
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-from compression import zstd
 from IPython.display import display
 from matplotlib.ticker import EngFormatter
 from pandas.core.frame import DataFrame
@@ -51,42 +47,21 @@ def top_trend(df: DataFrame, title: str | None = None) -> None:
     plt.show()
 
 
-# %% total install counts from dumps
+# %% total install counts from SQLite
 
-dumps_dir = (
-    Path("dumps")
-    if Path("dumps").exists()
-    else Path(__file__).resolve().parent / "dumps"
+df_totals = pd.read_sql_query(
+    """
+    SELECT 'formula_install_on_request' AS name, date, formula_total AS count
+    FROM totals WHERE formula_total IS NOT NULL
+    UNION ALL
+    SELECT 'cask_install' AS name, date, cask_total AS count
+    FROM totals WHERE cask_total IS NOT NULL
+    ORDER BY date, name
+    """,
+    conn,
 )
 
-data_list = []
-for path in sorted(dumps_dir.glob("*.zst")):
-    with zstd.open(path, "rt", encoding="utf-8") as f:
-        try:
-            content = json.load(f)
-            category = content.get("category")
-            end_date = content.get("end_date")
-            total_count = content.get("total_count")
-            if (
-                category is not None
-                and end_date is not None
-                and total_count is not None
-            ):
-                data_list.append(
-                    {
-                        "name": category,
-                        "date": end_date,
-                        "count": int(total_count),
-                    }
-                )
-        except (json.JSONDecodeError, OSError, ValueError) as e:
-            print(f"Error reading {path}: {e}")
-
-df_dumps = pd.DataFrame(data_list)
-df_dumps["date"] = pd.to_datetime(df_dumps["date"])
-df_dumps = df_dumps.sort_values("date")
-
-top_trend(df_dumps, "Total Installs over Time by Category")
+top_trend(df_totals, "Total Installs over Time by Category")
 # %% menubar apps
 query = r"""
 SELECT names.name, names.description, names.homepage,

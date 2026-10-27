@@ -16,6 +16,7 @@ Usage:
                                   # if it's already on disk) and upsert it
     python fetch.py --backfill   # rebuild the DB from every dump already in
                                   # dumps/, instead of hitting the network
+    python fetch.py --backfill-totals  # populate only totals from existing dumps
     python fetch.py --metadata-only  # refresh metadata without fetching stats
 """
 
@@ -163,6 +164,37 @@ def init_db(conn: sqlite3.Connection) -> None:
         if column not in columns:
             conn.execute(f"ALTER TABLE names ADD COLUMN {column} TEXT")
     conn.commit()
+    init_totals_db(conn)
+
+
+def init_totals_db(conn: sqlite3.Connection) -> None:
+    with conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS totals (
+                date TEXT PRIMARY KEY NOT NULL,
+                formula_total INTEGER,
+                cask_total INTEGER
+            )
+        """)
+
+
+def parse_total(data: dict) -> int:
+    total = data.get("total_count")
+    if type(total) is not int or total < 0:
+        raise ValueError("Missing or invalid total_count")
+    return total
+
+
+def upsert_total(
+    conn: sqlite3.Connection, date_str: str, kind: KindSpec, total: int
+) -> None:
+    column = {0: "formula_total", 1: "cask_total"}[kind.kind_id]
+    conn.execute(
+        f"""INSERT INTO totals (date, {column}) VALUES (?, ?)
+            ON CONFLICT (date) DO UPDATE SET {column} = excluded.{column}
+            WHERE totals.{column} IS NOT excluded.{column}""",
+        (date_str, total),
+    )
 
 
 def metadata_index(items: object, kind: KindSpec) -> dict[str, list[dict]]:
@@ -299,6 +331,26 @@ def store_records(
     return name_map, n
 
 
+def store_snapshot(
+    conn: sqlite3.Connection,
+    date_str: str,
+    data: dict,
+    kind: KindSpec,
+    min_installs: int,
+    name_map: dict[tuple[int, str], int],
+) -> tuple[dict[tuple[int, str], int], int]:
+    """Commit a source's unfiltered total and filtered package counts together."""
+    total = parse_total(data)
+    records = list(parse_items(data, kind, min_installs))
+    # Keep the caller's map unchanged if the transaction rolls back.
+    updated_map = name_map.copy()
+    with conn:
+        ensure_names(conn, records, updated_map)
+        n = upsert_counts(conn, date_str, records, updated_map)
+        upsert_total(conn, date_str, kind, total)
+    return updated_map, n
+
+
 # --------------------------------------------------------------------------
 # Run modes
 # --------------------------------------------------------------------------
@@ -309,8 +361,7 @@ def run_fetch(conn: sqlite3.Connection, dumps_dir: Path, min_installs: int) -> N
     name_map = load_name_map(conn)
     for kind in KIND_SPECS:
         date_str, data = get_today_data(kind, dumps_dir)
-        records = list(parse_items(data, kind, min_installs))
-        name_map, n = store_records(conn, date_str, records, name_map)
+        name_map, n = store_snapshot(conn, date_str, data, kind, min_installs, name_map)
         print(f"{kind.name}: upserted {n} rows for {date_str}")
 
 
@@ -325,9 +376,19 @@ def run_backfill(conn: sqlite3.Connection, dumps_dir: Path, min_installs: int) -
         for path in paths:
             date_str = path.name.removesuffix(f"{kind.name}.zst")
             data = read_dump(path)
-            records = list(parse_items(data, kind, min_installs))
-            name_map, n = store_records(conn, date_str, records, name_map)
+            name_map, n = store_snapshot(conn, date_str, data, kind, min_installs, name_map)
             print(f"[backfill] {path.name}: upserted {n} rows for {date_str}")
+
+
+def run_totals_backfill(conn: sqlite3.Connection, dumps_dir: Path) -> None:
+    """Populate only totals from archived snapshots, without network calls."""
+    for kind in KIND_SPECS:
+        for path in sorted(dumps_dir.glob(f"*{kind.name}.zst")):
+            date_str = path.name.removesuffix(f"{kind.name}.zst")
+            total = parse_total(read_dump(path))
+            with conn:
+                upsert_total(conn, date_str, kind, total)
+            print(f"[totals backfill] {path.name}: {total}")
 
 
 # --------------------------------------------------------------------------
@@ -345,6 +406,11 @@ def parse_args() -> argparse.Namespace:
         "--backfill",
         action="store_true",
         help="Rebuild counts from every existing dump instead of fetching new data.",
+    )
+    modes.add_argument(
+        "--backfill-totals",
+        action="store_true",
+        help="Populate only totals from existing dumps, leaving other tables untouched.",
     )
     parser.add_argument(
         "--db",
@@ -367,6 +433,10 @@ def main() -> None:
 
     conn = sqlite3.connect(args.db)
     try:
+        if args.backfill_totals:
+            init_totals_db(conn)
+            run_totals_backfill(conn, DUMPS_DIR)
+            return
         init_db(conn)
         if args.backfill:
             run_backfill(conn, DUMPS_DIR, args.min_installs)

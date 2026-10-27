@@ -69,7 +69,9 @@ Chart generation and notebook description searches read SQLite without network a
 sqlite3 brew_stats.db '.schema'
 ```
 
-`names` table stores package names and their latest metadata; `counts` stores rolling 30-day install totals by snapshot date and package. Join them on `name_id`. In both tables, `kind_id` is `0` for formulae and `1` for casks.
+`names` table stores package names and their latest metadata; `counts` stores rolling 30-day install counts by snapshot date and package. Join them on `name_id`. In both tables, `kind_id` is `0` for formulae and `1` for casks.
+
+The `totals` table stores the sum of the unfiltered rolling 30-day formula installs on request and cask installs by snapshot date in `formula_total` and `cask_total`; unavailable values are `NULL`.
 
 For example, list the ten most-installed formulae in the latest snapshot:
 
