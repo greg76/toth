@@ -16,7 +16,6 @@ from charts import (
 
 descriptions = get_descriptions()
 
-
 def top_trend(df: DataFrame, title: str | None = None) -> None:
     df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
     latest_date = df["date"].max()
@@ -60,9 +59,11 @@ df_totals = pd.read_sql_query(
     """,
     conn,
 )
-
 top_trend(df_totals, "Total Installs over Time by Category")
+
+
 # %% menubar apps
+
 query = r"""
 SELECT names.name, names.description, names.homepage,
        COALESCE(totals.total_count, 0) AS total_count
@@ -91,6 +92,7 @@ for chart in get_chart_data():
         plt.show()
     elif chart.chart_type == ChartType.LINE:
         top_trend(chart.df, title=chart.title)
+
 
 # %% load libraries for  clustering descriptions
 
@@ -129,6 +131,7 @@ display(missing_descriptions)
 df = df.loc[df["desc"].ne("")].reset_index(drop=True)
 
 display(df)
+
 
 # %% sentence transformer based clustering
 
@@ -211,11 +214,12 @@ outliers = summary_df[summary_df["cluster_id"] == -1]
 valid_clusters = summary_df[summary_df["cluster_id"] != -1].sort_values(
     by="total_downloads", ascending=False
 )
-
 summary_df = pd.concat([valid_clusters, outliers], ignore_index=True)
 
 # Display results nicely
 display(summary_df)
+
+
 # %% visualize how close the clusters are to each other
 
 from sklearn.manifold import MDS
