@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +14,24 @@ import pandas as pd
 from pandas.core.frame import DataFrame
 
 DB_PATH = Path(__file__).resolve().parent / "brew_stats.db"
+
+
+@lru_cache(maxsize=128)
+def _compile_regex(pattern: str) -> re.Pattern[str]:
+    return re.compile(pattern)
+
+
+def register_sql_functions(connection: sqlite3.Connection) -> None:
+    """Enable SQL REGEXP with Python regex semantics, including lookarounds."""
+    connection.create_function(
+        "regexp", 2,
+        lambda pattern, value: value is not None and bool(_compile_regex(pattern).search(value)),
+        deterministic=True,
+    )
+
+
 conn = sqlite3.connect(f"{DB_PATH.as_uri()}?mode=ro", uri=True)
+register_sql_functions(conn)
 DATA_DATE_FORMAT = "%Y%m%d"
 
 QUERY_LATEST_DATE = "SELECT MAX(date) AS latest_date FROM counts"
@@ -291,26 +309,6 @@ def get_descriptions() -> dict[str, str]:
     )}
 
 
-def search_package_ids(desc: str) -> list[int]:
-    pattern = _description_query_pattern(desc)
-    return [name_id for name_id, description in conn.execute(
-        "SELECT name_id, description FROM names WHERE description IS NOT NULL"
-    ) if pattern.search(description)]
-
-
-def package_ids_for_names(names) -> list[int]:
-    return [row[0] for row in conn.execute(
-        "SELECT name_id FROM names WHERE name IN (" + ",".join("?" for _ in names) + ")", names
-    )]
-
-
-def package_filter(packages) -> str:
-    """Match description search IDs precisely; allow explicitly curated names too."""
-    ids = [str(value) for value in packages if isinstance(value, int)]
-    names = ["'" + value.replace("'", "''") + "'" for value in packages if isinstance(value, str)]
-    return f"(names.name_id IN ({','.join(ids)}) OR names.name IN ({','.join(names)}))"
-
-
 def package_metadata(chart: ChartData) -> dict[str, list[dict]]:
     if "package_ids" not in chart.df:
         return {}
@@ -328,22 +326,62 @@ def package_metadata(chart: ChartData) -> dict[str, list[dict]]:
     return result
 
 
-def _description_query_pattern(query: str) -> re.Pattern[str]:
-    """Translate Homebrew's slash-delimited regex query or plain text query."""
-    query = query.strip()
-    if query.startswith("/") and query.endswith("/"):
-        return re.compile(query[1:-1])
-    return re.compile(re.escape(query), re.IGNORECASE)
+CATEGORY_FILTERS = {
+    "Code editors": r"description REGEXP '(?i)(?=.*code)(?=.*edit)'",
+    "Coding harnesses": r"""
+        description REGEXP '(?i)\A(?!.*(?:menu bar|status|pet|memory upgrade)).*\bcod(e|ing)\b\s\b(agent|assistant)\b.*'
+        OR description REGEXP '(?i)\A(?!.*(?:review|documentation|language|workout|usage tracker|manage)).*\bAI\b.*(?:programming|code)'
+        OR name IN ('antigravity', 'antigravity-cli', 'gemini-cli',
+                    'charmbracelet/tap/crush', 'anomalyco/tap/opencode', 'pi-coding-agent')
+    """,
+    "AI agents": r"""
+        (description REGEXP '(?i)^(?!.*(?:operator|cod(e|ing)|IDE|scanner|orchestrator|command|container|manage(r)?)).*\bai (agent|assistant)\b'
+         OR description REGEXP '(?i)agent runtime')
+        AND name <> 'google-gemini' AND name NOT LIKE '%coding%' AND name NOT LIKE '%code%'
+    """,
+    "LLM runners": r"""
+        description REGEXP '(?i)^(?!.*(?:token|dictation)).*LLM.*'
+        OR description REGEXP '(?i)^.*offline ai.*'
+        OR description REGEXP '(?i)^(?!.*token).*large language model.*'
+        OR name = 'mlx'
+    """,
+    "Container runners": r"""
+        description REGEXP '(?i)(?=.*container)(?=.*(build|run(ner|times?)?|desktop|gui|manag(e|ing)))'
+    """,
+    "Languages and runtimes": r"""
+        description REGEXP '(?i)(?=.*(?:programming|compiler|interpreter|scripting|sdk))(?=.*language)'
+        OR description REGEXP '(?i)(?=.*javascript)(?=.*runtime)'
+        OR name IN ('rust', 'typescript')
+    """,
+    "JavaScript runtimes": r"description REGEXP '(?i)(?=.*javascript)(?=.*runtime)'",
+    "Python package managers": r"""
+        description REGEXP '(?i)python package|python dependency|conda'
+        OR name = 'pixi'
+    """,
+    "Code analyzers and linters": r"""
+        (description REGEXP '(?i)^(?!.*(claude code|colors|prose|visualization|generator|morphological|compile|driver|computation|statically typed))(?=.*(static|analy[sz]e))(?=.*(\bcode\b|python|php|python|java|swift|Elixir|script|logic))'
+         OR description REGEXP '(?i)^(?!.*(prose|certificate|preview)).*\blinter\b')
+        AND name NOT IN ('roapi', 'sigrok-cli', 'memoryanalyzer')
+    """,
+    "Terminal emulators": r"description REGEXP '(?i)terminal emulator'",
+    "Command-line shells": r"""
+        description REGEXP '(?i)(?=.*(?:unix|posix|berkeley))(?=.*shell)'
+        OR name IN ('nushell', 'ksh93', 'elvish', 'powershell')
+    """,
+    "Search tools": r"description REGEXP '(?i)^(?!.*(?:backend)).*search|find.*'",
+    "Compression tools": r"""
+        description REGEXP '(?i)^(?!.*(?:image)).*compression.*'
+        OR description REGEXP '(?i)archiver'
+    """,
+    "Fonts": "name LIKE 'font-%'",
+}
 
 
-def brew_search(desc: str) -> list[str]:
-    """Return package names whose stored Homebrew descriptions match ``desc``."""
-    pattern = _description_query_pattern(desc)
-    return [
-        name
-        for name, description in get_descriptions().items()
-        if pattern.search(description)
-    ]
+def category_query(title: str) -> str:
+    # Match metadata once per package, before joining to historical counts.
+    return QUERY_TEMPLATE.format(
+        f"names.name_id IN (SELECT name_id FROM names WHERE {CATEGORY_FILTERS[title]})"
+    )
 
 
 #
@@ -376,218 +414,131 @@ def get_chart_data() -> list[ChartData]:
     )
 
     # --- Code editors ---
-    match_list = package_filter(search_package_ids(r"/(?i)(?=.*code)(?=.*edit)/"))
     chart_data.append(
         ChartData(
             title="Code editors",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
+            df=pd.read_sql_query(category_query("Code editors"), conn),
             description="Packages whose descriptions indicate that they are used for editing code. With coding harnesses becoming more capable, does coding move away from the editor?",
         )
     )
 
     # --- coding harnesses ---
-    agents = set(
-        search_package_ids(
-            r"/(?i)\A(?!.*(?:menu bar|status|pet|memory upgrade)).*\bcod(e|ing)\b\s\b(agent|assistant)\b.*/"
-        )
-        + search_package_ids(
-            r"/(?i)\A(?!.*(?:review|documentation|language|workout|usage tracker|manage)).*\bAI\b.*(?:programming|code)/"
-        )
-    )
-    agents.update(
-        [
-            "antigravity",  # Agent orchestration platform
-            "antigravity-cli",  # Terminal interface for Antigravity agents
-            "gemini-cli",  # Interact with Google Gemini AI models from the command-line
-            "charmbracelet/tap/crush",
-            "anomalyco/tap/opencode",
-            "pi-coding-agent",  # AI agent toolkit
-        ]
-    )
-    match_list = package_filter(agents)
     chart_data.append(
         ChartData(
             title="Coding harnesses",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
+            df=pd.read_sql_query(category_query("Coding harnesses"), conn),
             description="AI coding tools designed to work on code, rather than just help you write it.",
         )
     )
 
     # --- AI agent ---
-    pkgs = set(
-        search_package_ids(
-            r"/(?i)^(?!.*(?:operator|cod(e|ing)|IDE|scanner|orchestrator|command|container|manage(r)?)).*\bai (agent|assistant)\b/"
-        )
-        + search_package_ids("agent runtime")
-    )
-    pkgs.difference_update(package_ids_for_names(["google-gemini"]))
-    pkgs.difference_update(row[0] for row in conn.execute(
-        "SELECT name_id FROM names WHERE name LIKE '%coding%' OR name LIKE '%code%'"
-    ))
-    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="AI agents",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
+            df=pd.read_sql_query(category_query("AI agents"), conn),
             description="AI assistants that can use tools, manage tasks and work towards a goal.",
         )
     )
 
     # --- LLM runners ---
-    pkgs = set(
-        search_package_ids("/(?i)^(?!.*(?:token|dictation)).*LLM.*/")
-        + search_package_ids("/(?i)^.*offline ai.*/")
-        + search_package_ids("/(?i)^(?!.*token).*large language model.*/")
-        + ["mlx"]
-    )
-    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="LLM runners",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
+            df=pd.read_sql_query(category_query("LLM runners"), conn),
             description="Tools for downloading, running and interacting with large language models locally.",
         )
     )
 
     # --- container runners ---
-    pkgs = search_package_ids(
-        "/(?i)(?=.*container)(?=.*(build|run(ner|times?)?|desktop|gui|manag(e|ing)))/"
-    )
-    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="Container runners",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
+            df=pd.read_sql_query(category_query("Container runners"), conn),
             description="Tools for building, running and managing containers — isolated environments for running software and its dependencies.",
         )
     )
 
     # --- languages and runtimes ---
-    pkgs = set(
-        search_package_ids(
-            r"/(?i)(?=.*(?:programming|compiler|interpreter|scripting|sdk))(?=.*language)/"
-        )
-        + search_package_ids(r"/(?i)(?=.*javascript)(?=.*runtime)/")
-        + ["rust", "typescript"]
-    )
-    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="Languages and runtimes",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
+            df=pd.read_sql_query(category_query("Languages and runtimes"), conn),
             description="Programming languages, compilers, interpreters and runtimes used to write and run software.",
         )
     )
 
     # --- javascript runtimes ---
-    pkgs = search_package_ids("/(?i)(?=.*javascript)(?=.*runtime)/")
-    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="JavaScript runtimes",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
+            df=pd.read_sql_query(category_query("JavaScript runtimes"), conn),
             description="Runtimes for executing JavaScript outside the browser.",
         )
     )
 
     # --- python package managers ---
-    pkgs = set(
-        search_package_ids("python package")
-        + search_package_ids("python dependency")
-        # + search_package_ids("python environment")
-        + search_package_ids("conda")
-        + ["pixi"]
-    )
-    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="Python package managers",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
+            df=pd.read_sql_query(category_query("Python package managers"), conn),
             description="Tools for installing and managing Python tools, packages and their dependencies.",
         )
     )
 
     # -- static code analysers and linters ---
-    pkgs = set(
-        search_package_ids(
-            r"/(?i)^(?!.*(claude code|colors|prose|visualization|generator|morphological|compile|driver|computation|statically typed))(?=.*(static|analy[sz]e))(?=.*(\bcode\b|python|php|python|java|swift|Elixir|script|logic))/"
-        )
-        + search_package_ids(r"/(?i)^(?!.*(prose|certificate|preview)).*\blinter\b/")
-    )
-    pkgs.difference_update(package_ids_for_names(["roapi", "sigrok-cli", "memoryanalyzer"]))
-
-    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="Code analyzers and linters",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
+            df=pd.read_sql_query(category_query("Code analyzers and linters"), conn),
             description="Code, configuration, or infrastructure definition inspection to identify potential bugs, security issues, and rule violations without executing them. Includes linters, static analyzers, and security-focused analyzers.",
         )
     )
 
     # --- terminal emulators over time ---
-    match_list = package_filter(search_package_ids("terminal emulator"))
     chart_data.append(
         ChartData(
             title="Terminal emulators",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
+            df=pd.read_sql_query(category_query("Terminal emulators"), conn),
             description="Alternative terminals that offer more than the OS default. Improved UI and features for managing multiple or remote sessions.",
         )
     )
 
     # --- shells ---
-    pkgs = search_package_ids("/(?i)(?=.*(?:unix|posix|berkeley))(?=.*shell)/")
-
-    outliers = """
-    nushell: Modern shell for the GitHub era
-    ksh93: KornShell, ksh93
-    elvish: Friendly and expressive shell
-    powershell: Command-line shell and scripting language
-    """
-    pkgs += [pkg for line in outliers.splitlines() if (pkg := line.split(":")[0])]
-
-    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="Command-line shells",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
+            df=pd.read_sql_query(category_query("Command-line shells"), conn),
             description="Shells for running commands, scripting tasks and interacting with the operating system.",
         )
     )
 
     # --- search tools ---
-    pkgs = set(search_package_ids("/(?i)^(?!.*(?:backend)).*search|find.*/"))
-    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="Search tools",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
+            df=pd.read_sql_query(category_query("Search tools"), conn),
             description="Command-line tools for finding files, searching code and filtering results. Often faster and more convenient than the traditional Unix tools.",
         )
     )
 
     # --- compression tools ---
-    pkgs = set(
-        search_package_ids("/(?i)^(?!.*(?:image)).*compression.*/") + search_package_ids("archiver")
-    )
-    match_list = package_filter(pkgs)
     chart_data.append(
         ChartData(
             title="Compression tools",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format(match_list), conn),
+            df=pd.read_sql_query(category_query("Compression tools"), conn),
             description="Tools for compressing, decompressing, archiving, efficiently storing and moving files around.",
         )
     )
@@ -597,7 +548,7 @@ def get_chart_data() -> list[ChartData]:
         ChartData(
             title="Fonts",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(QUERY_TEMPLATE.format("names.name LIKE 'font-%'"), conn),
+            df=pd.read_sql_query(category_query("Fonts"), conn),
             description="Developer and terminal fonts, including monospaced fonts with extra glyphs for richer prompts and text interfaces.",
         )
     )

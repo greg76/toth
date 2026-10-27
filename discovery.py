@@ -12,9 +12,7 @@ from matplotlib.ticker import EngFormatter
 from pandas.core.frame import DataFrame
 
 from charts import (
-    QUERY_TEMPLATE,
     ChartType,
-    brew_search,
     conn,
     get_chart_data,
     get_descriptions,
@@ -89,22 +87,21 @@ df_dumps["date"] = pd.to_datetime(df_dumps["date"])
 df_dumps = df_dumps.sort_values("date")
 
 top_trend(df_dumps, "Total Installs over Time by Category")
-# %% shell descriptions
-
-pkgs = brew_search("/(?i)(?=.*(?:unix|posix|berkeley))(?=.*shell)/")
-
-outliers = """
-nushell: Modern shell for the GitHub era
-ksh93: KornShell, ksh93
-elvish: Friendly and expressive shell
-powershell: Command-line shell and scripting language
+# %% menubar apps
+query = r"""
+SELECT names.name, names.description, names.homepage,
+       COALESCE(totals.total_count, 0) AS total_count
+FROM names
+LEFT JOIN (
+    SELECT name_id, SUM(count) AS total_count
+    FROM counts
+    GROUP BY name_id
+) AS totals ON totals.name_id = names.name_id
+WHERE names.description REGEXP '(?i)menu\s*bar'
+ORDER BY total_count DESC, names.name, names.kind_id
 """
-
-pkgs += [pkg for line in outliers.splitlines() if (pkg := line.split(":")[0])]
-
-match_list = ", ".join(f"'{name}'" for name in pkgs)
-df = pd.read_sql_query(QUERY_TEMPLATE.format(f"names.name IN ({match_list})"), conn)
-top_trend(df, "shells")
+df = pd.read_sql_query(query, conn)
+display(df)
 
 
 # %% published charts

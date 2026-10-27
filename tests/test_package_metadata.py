@@ -24,6 +24,7 @@ class PackageMetadataTests(unittest.TestCase):
     def setUp(self):
         self.db = sqlite3.connect(':memory:')
         init_db(self.db)
+        charts.register_sql_functions(self.db)
 
     def tearDown(self):
         self.db.close()
@@ -103,7 +104,12 @@ class PackageMetadataTests(unittest.TestCase):
             self.assertEqual(packages['same (formula)'][0]['kind'], 'formula')
             self.assertEqual(packages['same (cask)'][0]['homepage'], 'https://example.org/same')
             self.assertEqual({row['name'] for row in packages['tool']}, {'tool@1', 'tool@2'})
-            self.assertEqual(set(charts.search_package_ids('Code editor')), {row[0] for row in self.db.execute('SELECT name_id FROM names WHERE kind_id=0')})
+            self.assertEqual(
+                {row[0] for row in self.db.execute(
+                    'SELECT name_id FROM names WHERE ' + charts.CATEGORY_FILTERS['Code editors']
+                )},
+                {row[0] for row in self.db.execute('SELECT name_id FROM names WHERE kind_id=0')},
+            )
             for query in (charts.QUERY_GAINERS, charts.QUERY_NEW_ENTRIES):
                 frame = pd.read_sql_query(query, self.db)
                 labels = list(frame.name)
