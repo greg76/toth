@@ -328,13 +328,13 @@ def package_metadata(chart: ChartData) -> dict[str, list[dict]]:
 
 CATEGORY_FILTERS = {
     "Code editors": r"description REGEXP '(?i)(?=.*code)(?=.*edit)'",
-    "Coding harnesses": r"""
+    "Coding Agents & Harnesses": r"""
         description REGEXP '(?i)\A(?!.*(?:menu bar|status|pet|memory upgrade)).*\bcod(e|ing)\b\s\b(agent|assistant)\b.*'
         OR description REGEXP '(?i)\A(?!.*(?:review|documentation|language|workout|usage tracker|manage)).*\bAI\b.*(?:programming|code)'
         OR name IN ('antigravity', 'antigravity-cli', 'gemini-cli',
                     'charmbracelet/tap/crush', 'anomalyco/tap/opencode', 'pi-coding-agent')
     """,
-    "AI agents": r"""
+    "General-purpose Agents & Harnesses": r"""
         (description REGEXP '(?i)^(?!.*(?:operator|cod(e|ing)|IDE|scanner|orchestrator|command|container|manage(r)?)).*\bai (agent|assistant)\b'
          OR description REGEXP '(?i)agent runtime')
         AND name <> 'google-gemini' AND name NOT LIKE '%coding%' AND name NOT LIKE '%code%'
@@ -426,19 +426,19 @@ def get_chart_data() -> list[ChartData]:
     # --- coding harnesses ---
     chart_data.append(
         ChartData(
-            title="Coding harnesses",
+            title="Coding Agents & Harnesses",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(category_query("Coding harnesses"), conn),
+            df=pd.read_sql_query(category_query("Coding Agents & Harnesses"), conn),
             description="AI coding tools designed to work on code, rather than just help you write it.",
         )
     )
 
-    # --- AI agent ---
+    # --- General-purpose Agents & Harnesses ---
     chart_data.append(
         ChartData(
-            title="AI agents",
+            title="General-purpose Agents & Harnesses",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(category_query("AI agents"), conn),
+            df=pd.read_sql_query(category_query("General-purpose Agents & Harnesses"), conn),
             description="AI assistants that can use tools, manage tasks and work towards a goal.",
         )
     )

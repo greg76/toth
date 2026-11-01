@@ -4,7 +4,7 @@ Weekly snapshots of Homebrew's 30-day package analytics, turned into trend chart
 
 Homebrew exposes useful install data, but only as a rolling view. **Top of The Hops** takes snapshots so you can see how the popularity of the tools change over time in the different categories.
 
-The report currently covers things like code editors, coding harnesses, AI agents, LLM runners, containers, programming languages, terminals and more.
+The report currently covers things like code editors, coding agents and harnesses, general-purpose agents and harnesses, LLM runners, containers, programming languages, terminals and more.
 
 **See the report:** https://greg76.github.io/toth/
 

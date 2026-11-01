@@ -32,7 +32,7 @@ class SqlCategoryTests(unittest.TestCase):
         self.package('substring', 'Decoding assistant')
         self.package('missing', None)
         self.package('empty', '')
-        self.assertEqual(self.members('Coding harnesses'), {agent})
+        self.assertEqual(self.members('Coding Agents & Harnesses'), {agent})
 
     def test_curated_names_match_without_metadata_and_exclusions_apply_to_both_branches(self):
         shells = {self.package(name, None) for name in
@@ -46,7 +46,7 @@ class SqlCategoryTests(unittest.TestCase):
         self.package('coding-runtime', 'Agent runtime')
         self.package('code-assistant', 'AI assistant')
         self.package('scanner', 'AI assistant scanner')
-        self.assertEqual(self.members('AI agents'), {runtime, assistant})
+        self.assertEqual(self.members('General-purpose Agents & Harnesses'), {runtime, assistant})
 
     def test_category_join_preserves_kind_tap_and_version_identity(self):
         selected = {
