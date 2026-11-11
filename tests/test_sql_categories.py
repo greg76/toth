@@ -67,6 +67,41 @@ class SqlCategoryTests(unittest.TestCase):
         self.assertEqual(ids, selected)
         self.assertEqual(set(frame.name), {'same', 'tool', 'owner/tap/tool'})
 
+    def test_top_five_use_latest_available_counts_and_preserve_gaps(self):
+        def record(name_id, date, count):
+            self.db.execute(
+                'INSERT INTO counts (date, kind_id, name_id, count) VALUES (?, 0, ?, ?)',
+                (date, name_id, count),
+            )
+
+        for index in range(4):
+            leader = self.package(f'leader-{index}', 'Code editor')
+            record(leader, '20261025', 500 + index)
+
+        # Versions merge before ranking, even when absent in the latest snapshot.
+        for name in ('intermittent@1', 'intermittent@2'):
+            package = self.package(name, 'Code editor')
+            record(package, '20261018', 110)
+
+        low = self.package('low', 'Code editor')
+        record(low, '20261025', 200)
+        faded = self.package('faded', 'Code editor')
+        record(faded, '20261018', 9000)
+        record(faded, '20261025', 1)
+
+        frame = pd.read_sql_query(charts.category_query('Code editors'), self.db)
+        self.assertEqual(set(frame.name), {
+            'leader-0', 'leader-1', 'leader-2', 'leader-3', 'intermittent',
+        })
+        intermittent = frame.loc[frame.name == 'intermittent']
+        self.assertEqual(intermittent['count'].tolist(), [220])
+        chart = charts.chartjs_record(charts.ChartData(
+            title='Code editors', chart_type=charts.ChartType.LINE, df=frame,
+        ))
+        dataset = next(item for item in chart['config']['data']['datasets']
+                       if item['label'] == 'intermittent')
+        self.assertEqual(dataset['data'], [220, None])
+
     def test_linter_exclusions_apply_to_every_alternative(self):
         analyzer = self.package('analyzer', 'Static code analyzer')
         linter = self.package('linter', 'Python linter')

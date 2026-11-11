@@ -48,9 +48,16 @@ merged AS (
            GROUP_CONCAT(DISTINCT name_id) AS package_ids
     FROM cleaned GROUP BY date, kind_id, name
 ),
+latest_counts AS (
+    SELECT kind_id, name, count,
+           ROW_NUMBER() OVER (
+               PARTITION BY kind_id, name ORDER BY date DESC
+           ) AS recency
+    FROM merged
+),
 top_names AS (
-    SELECT kind_id, name FROM merged
-    WHERE date = (SELECT MAX(date) FROM counts)
+    SELECT kind_id, name FROM latest_counts
+    WHERE recency = 1
     ORDER BY count DESC, kind_id, name LIMIT 5
 )
 SELECT date,
@@ -358,6 +365,10 @@ CATEGORY_FILTERS = {
         description REGEXP '(?i)python package|python dependency|conda'
         OR name = 'pixi'
     """,
+    "Static website generators": (
+        r"description REGEXP '(?i)\b(?:static[\s-]+(?:web[\s-]*)?sites?|blogs?|blogging)\b.*\bgenerat(?:or|ors|e|es|ing|ion)\b"
+        r"|\bgenerat(?:or|ors|e|es|ing|ion)\b.*\b(?:static[\s-]+(?:web[\s-]*)?sites?|blogs?|blogging)\b'"
+    ),
     "Code analyzers and linters": r"""
         (description REGEXP '(?i)^(?!.*(claude code|colors|prose|visualization|generator|morphological|compile|driver|computation|statically typed))(?=.*(static|analy[sz]e))(?=.*(\bcode\b|python|php|python|java|swift|Elixir|script|logic))'
          OR description REGEXP '(?i)^(?!.*(prose|certificate|preview)).*\blinter\b')
@@ -490,6 +501,16 @@ def get_chart_data() -> list[ChartData]:
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(category_query("Python package managers"), conn),
             description="Tools for installing and managing Python tools, packages and their dependencies.",
+        )
+    )
+
+    # --- static website generators ---
+    chart_data.append(
+        ChartData(
+            title="Static website generators",
+            chart_type=ChartType.LINE,
+            df=pd.read_sql_query(category_query("Static website generators"), conn),
+            description="Tools for generating static websites and blogs from content and templates.",
         )
     )
 

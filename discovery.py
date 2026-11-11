@@ -80,6 +80,55 @@ df = pd.read_sql_query(query, conn)
 display(df)
 
 
+# %% static website generators
+
+# Established reference tools (summaries, not necessarily Homebrew descriptions):
+# Hugo: configurable static site generator.
+# Zola: static site generator with templates, Sass, and content processing built in.
+# Jekyll: generates static websites and blogs from text files and templates.
+# Eleventy: static site generator supporting multiple template languages.
+# Gatsby: React-based framework for generating static websites.
+# Hexo: blog framework that generates static websites from Markdown.
+# Pelican: Python static site generator for blogs and other websites.
+#
+# Database exploration: explicit static-site wording, broader website/blog
+# generation wording, and Markdown/documentation searches all found Hugo and
+# Zola as general-purpose static site generators. The other reference tools
+# above have no entries. MkDocs and sphinx-doc are documentation generators;
+# astro here is an unrelated Airflow tool. Neither names nor Markdown alone
+# reliably identify this category.
+#
+# Match site/blog wording together with generation wording in either order.
+# This discovers similarly described tools without a package-name allowlist.
+# Descriptions that only say "framework" or "publishing" may be missed;
+# results are candidates for review, not a complete inventory.
+static_site_subject = r"\b(?:static[\s-]+(?:web[\s-]*)?sites?|blogs?|blogging)\b"
+static_site_generation = r"\bgenerat(?:or|ors|e|es|ing|ion)\b"
+static_site_pattern = (
+    rf"(?i){static_site_subject}.*{static_site_generation}"
+    rf"|{static_site_generation}.*{static_site_subject}"
+)
+
+query = """
+SELECT names.name, names.description, names.homepage,
+       COALESCE(totals.total_count, 0) AS total_count
+FROM names
+LEFT JOIN (
+    SELECT name_id, SUM(count) AS total_count
+    FROM counts
+    GROUP BY name_id
+) AS totals ON totals.name_id = names.name_id
+WHERE names.description REGEXP ?
+ORDER BY total_count DESC, names.name, names.kind_id
+"""
+# Follow the menubar block's ranking. These are sums of overlapping rolling
+# 30-day snapshots, not distinct installs over the whole observation period.
+df_static_site_generators = pd.read_sql_query(
+    query, conn, params=(static_site_pattern,)
+)
+display(df_static_site_generators)
+
+
 # %% published charts
 
 for chart in get_chart_data():
