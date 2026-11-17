@@ -58,7 +58,7 @@ latest_counts AS (
 top_names AS (
     SELECT kind_id, name FROM latest_counts
     WHERE recency = 1
-    ORDER BY count DESC, kind_id, name LIMIT 5
+    ORDER BY count DESC, kind_id, name LIMIT 10
 )
 SELECT date,
     CASE WHEN EXISTS (SELECT 1 FROM merged AS other
@@ -334,7 +334,13 @@ def package_metadata(chart: ChartData) -> dict[str, list[dict]]:
 
 
 CATEGORY_FILTERS = {
-    "Code editors": r"description REGEXP '(?i)(?=.*code)(?=.*edit)'",
+    "Code editors": r"""
+        description REGEXP '(?i)(?=.*code)(?=.*edit)'
+        OR description REGEXP '(?i)\btext editor\b'
+        OR name IN ('vim', 'neovim', 'macvim', 'neovide',
+                    'd12frosted/emacs-plus/emacs-plus-app')
+        OR name GLOB 'd12frosted/emacs-plus/emacs-plus@*'
+    """,
     "Coding Agents & Harnesses": r"""
         description REGEXP '(?i)\A(?!.*(?:menu bar|status|pet|memory upgrade)).*\bcod(e|ing)\b\s\b(agent|assistant)\b.*'
         OR description REGEXP '(?i)\A(?!.*(?:review|documentation|language|workout|usage tracker|manage)).*\bAI\b.*(?:programming|code)'
@@ -352,8 +358,9 @@ CATEGORY_FILTERS = {
         OR description REGEXP '(?i)^(?!.*token).*large language model.*'
         OR name = 'mlx'
     """,
-    "Container runners": r"""
+    "Local container platforms": r"""
         description REGEXP '(?i)(?=.*container)(?=.*(build|run(ner|times?)?|desktop|gui|manag(e|ing)))'
+        OR name = 'orbstack'
     """,
     "Languages and runtimes": r"""
         description REGEXP '(?i)(?=.*(?:programming|compiler|interpreter|scripting|sdk))(?=.*language)'
@@ -365,16 +372,16 @@ CATEGORY_FILTERS = {
         description REGEXP '(?i)python package|python dependency|conda'
         OR name = 'pixi'
     """,
-    "Static website generators": (
-        r"description REGEXP '(?i)\b(?:static[\s-]+(?:web[\s-]*)?sites?|blogs?|blogging)\b.*\bgenerat(?:or|ors|e|es|ing|ion)\b"
-        r"|\bgenerat(?:or|ors|e|es|ing|ion)\b.*\b(?:static[\s-]+(?:web[\s-]*)?sites?|blogs?|blogging)\b'"
-    ),
-    "Code analyzers and linters": r"""
-        (description REGEXP '(?i)^(?!.*(claude code|colors|prose|visualization|generator|morphological|compile|driver|computation|statically typed))(?=.*(static|analy[sz]e))(?=.*(\bcode\b|python|php|python|java|swift|Elixir|script|logic))'
-         OR description REGEXP '(?i)^(?!.*(prose|certificate|preview)).*\blinter\b')
-        AND name NOT IN ('roapi', 'sigrok-cli', 'memoryanalyzer')
+    "Programming error checkers": r"""
+        (description REGEXP '(?i)\b(lint|linters?|linting|type checker)\b|\bstatic analysis\b.*\b(?:code|scripts?)\b'
+         AND description NOT REGEXP '(?i)\b(?:prose|markdown|yaml|toml|openapi|swagger|dockerfile|kubernetes|terraform|style|conventions|interface builder|sql)\b'
+         AND name NOT IN ('ast-grep', 'ktlint'))
+        OR name IN ('biome', 'eslint', 'flake8')
     """,
-    "Terminal emulators": r"description REGEXP '(?i)terminal emulator'",
+    "Terminal emulators": r"""
+        (description REGEXP '(?i)terminal emulator' OR name IN ('warp', 'cmux'))
+        AND name <> 'vte3'
+    """,
     "Command-line shells": r"""
         description REGEXP '(?i)(?=.*(?:unix|posix|berkeley))(?=.*shell)'
         OR name IN ('nushell', 'ksh93', 'elvish', 'powershell')
@@ -430,7 +437,7 @@ def get_chart_data() -> list[ChartData]:
             title="Code editors",
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(category_query("Code editors"), conn),
-            description="Packages whose descriptions indicate that they are used for editing code. With coding harnesses becoming more capable, does coding move away from the editor?",
+            description="Code and text editors, including selected Vim and Emacs variants. With coding harnesses becoming more capable, does coding move away from the editor?",
         )
     )
 
@@ -464,13 +471,13 @@ def get_chart_data() -> list[ChartData]:
         )
     )
 
-    # --- container runners ---
+    # --- local container platforms ---
     chart_data.append(
         ChartData(
-            title="Container runners",
+            title="Local container platforms",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(category_query("Container runners"), conn),
-            description="Tools for building, running and managing containers — isolated environments for running software and its dependencies.",
+            df=pd.read_sql_query(category_query("Local container platforms"), conn),
+            description="Tools that run containers locally or provide a desktop interface for managing a local container runtime.",
         )
     )
 
@@ -504,23 +511,13 @@ def get_chart_data() -> list[ChartData]:
         )
     )
 
-    # --- static website generators ---
+    # --- programming error checkers ---
     chart_data.append(
         ChartData(
-            title="Static website generators",
+            title="Programming error checkers",
             chart_type=ChartType.LINE,
-            df=pd.read_sql_query(category_query("Static website generators"), conn),
-            description="Tools for generating static websites and blogs from content and templates.",
-        )
-    )
-
-    # -- static code analysers and linters ---
-    chart_data.append(
-        ChartData(
-            title="Code analyzers and linters",
-            chart_type=ChartType.LINE,
-            df=pd.read_sql_query(category_query("Code analyzers and linters"), conn),
-            description="Code, configuration, or infrastructure definition inspection to identify potential bugs, security issues, and rule violations without executing them. Includes linters, static analyzers, and security-focused analyzers.",
+            df=pd.read_sql_query(category_query("Programming error checkers"), conn),
+            description="Selected linters and type checkers that detect syntax, type and other likely programming errors without running the code.",
         )
     )
 
@@ -530,7 +527,7 @@ def get_chart_data() -> list[ChartData]:
             title="Terminal emulators",
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(category_query("Terminal emulators"), conn),
-            description="Alternative terminals that offer more than the OS default. Improved UI and features for managing multiple or remote sessions.",
+            description="Applications that provide a terminal for local shells and command-line programs, including terminals with tabs, panes or coding agent support.",
         )
     )
 

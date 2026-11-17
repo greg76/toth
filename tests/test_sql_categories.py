@@ -67,14 +67,52 @@ class SqlCategoryTests(unittest.TestCase):
         self.assertEqual(ids, selected)
         self.assertEqual(set(frame.name), {'same', 'tool', 'owner/tap/tool'})
 
-    def test_top_five_use_latest_available_counts_and_preserve_gaps(self):
+    def test_code_editors_include_text_editors_and_curated_variants(self):
+        selected = {
+            self.package('fresh-editor', 'Text editor for your terminal'),
+            self.package('micro', 'Modern terminal-based text editor'),
+            self.package('emacs', 'GNU Emacs text editor'),
+            self.package('cursor', 'Write, edit, and chat about your code'),
+            *(self.package(name, None) for name in (
+                'vim', 'neovim', 'macvim', 'neovide',
+                'd12frosted/emacs-plus/emacs-plus@31',
+                'd12frosted/emacs-plus/emacs-plus-app',
+            )),
+        }
+        self.package('wispr-flow', 'Voice-to-text dictation with AI-powered auto-editing')
+        self.package('image-editor', 'Image editor')
+        self.assertEqual(self.members('Code editors'), selected)
+
+    def test_local_container_platforms_include_orbstack_and_exclude_add_ons(self):
+        selected = {
+            self.package('orbstack', 'Replacement for Docker Desktop', kind=1),
+            self.package('colima', 'Container runtimes on macOS and Linux'),
+            self.package('podman-desktop', 'Browse, manage, inspect containers', kind=1),
+        }
+        self.package('docker-compose', 'Isolated development environments using Docker')
+        self.package('docker-buildx', 'Docker CLI plugin for extended build capabilities')
+        self.package('trivy', 'Vulnerability scanner for container images')
+        self.assertEqual(self.members('Local container platforms'), selected)
+
+    def test_terminal_emulators_include_terminal_apps_and_exclude_widgets(self):
+        selected = {
+            self.package('warp', 'Rust-based terminal', kind=1),
+            self.package('cmux', 'Ghostty-based terminal with vertical tabs', kind=1),
+            self.package('ghostty', 'Terminal emulator', kind=1),
+        }
+        self.package('vte3', 'Terminal emulator widget used by GNOME terminal')
+        self.package('tmux', 'Terminal multiplexer')
+        self.package('fresh-editor', 'Text editor for your terminal')
+        self.assertEqual(self.members('Terminal emulators'), selected)
+
+    def test_top_ten_use_latest_available_counts_and_preserve_gaps(self):
         def record(name_id, date, count):
             self.db.execute(
                 'INSERT INTO counts (date, kind_id, name_id, count) VALUES (?, 0, ?, ?)',
                 (date, name_id, count),
             )
 
-        for index in range(4):
+        for index in range(9):
             leader = self.package(f'leader-{index}', 'Code editor')
             record(leader, '20261025', 500 + index)
 
@@ -91,7 +129,7 @@ class SqlCategoryTests(unittest.TestCase):
 
         frame = pd.read_sql_query(charts.category_query('Code editors'), self.db)
         self.assertEqual(set(frame.name), {
-            'leader-0', 'leader-1', 'leader-2', 'leader-3', 'intermittent',
+            *(f'leader-{index}' for index in range(9)), 'intermittent',
         })
         intermittent = frame.loc[frame.name == 'intermittent']
         self.assertEqual(intermittent['count'].tolist(), [220])
@@ -102,13 +140,20 @@ class SqlCategoryTests(unittest.TestCase):
                        if item['label'] == 'intermittent')
         self.assertEqual(dataset['data'], [220, None])
 
-    def test_linter_exclusions_apply_to_every_alternative(self):
-        analyzer = self.package('analyzer', 'Static code analyzer')
-        linter = self.package('linter', 'Python linter')
-        self.package('roapi', 'Static code analyzer')
-        self.package('memoryanalyzer', 'Python linter')
-        self.package('prose', 'Prose linter')
-        self.assertEqual(self.members('Code analyzers and linters'), {analyzer, linter})
+    def test_programming_error_checkers_exclude_other_kinds_of_tools(self):
+        selected = {
+            self.package('future-tool', 'Fast linter for Python'),
+            self.package('future-types', 'Type checker for Rust'),
+            self.package('shellcheck', 'Static analysis and lint tool for shell scripts'),
+            self.package('golangci-lint', 'Fast linters runner for Go'),
+            *(self.package(name, None) for name in ('biome', 'eslint', 'flake8')),
+        }
+        self.package('swiftlint', 'Tool to enforce Swift style and conventions')
+        self.package('yamllint', 'Linter for YAML files')
+        self.package('trivy', 'Vulnerability scanner')
+        self.package('ast-grep', 'Code searching, linting, rewriting')
+        self.package('ktlint', 'Kotlin linter with built-in formatter')
+        self.assertEqual(self.members('Programming error checkers'), selected)
 
 if __name__ == '__main__':
     unittest.main()

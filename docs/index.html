@@ -152,6 +152,15 @@
       gap: 8px 16px;
       margin-bottom: 12px;
     }
+    .scale-control {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
     .package-label {
       border: 0;
       padding: 3px 0;
@@ -350,12 +359,10 @@
     const BAR_CATEGORY_PERCENTAGE = 0.8;
     const BAR_PERCENTAGE = 0.8;
     const BAR_MAX_THICKNESS = 24;
+    // Alternate hues and lightness so neighboring ranks remain distinct.
     const COLORS = [
-      "#4f7c45",
-      "#c48a38",
-      "#171914",
-      "#31552e",
-      "#8c6b2f"
+      "#2166ac", "#b44c00", "#16734a", "#a62760", "#7450a2",
+      "#827000", "#007d87", "#b33b32", "#465784", "#875922"
     ];
 
     Chart.defaults.font.family =
@@ -380,7 +387,8 @@
           bodyColor: "#ffffff",
           padding: 12,
           cornerRadius: 8,
-          displayColors: true
+          displayColors: true,
+          usePointStyle: true
         }
       },
       scales: {
@@ -482,6 +490,14 @@
             scales: {
               y: {
                 ...commonOptions.scales.y,
+                type: "logarithmic",
+                afterBuildTicks(scale) {
+                  const ticks = [];
+                  for (let value = 2 ** Math.ceil(Math.log2(scale.min)); value <= scale.max; value *= 2) {
+                    ticks.push({ value });
+                  }
+                  scale.ticks = ticks;
+                },
                 ticks: {
                   ...commonOptions.scales.y.ticks,
                   callback: formatNumber
@@ -513,6 +529,11 @@
             ...(defaultPlugins.tooltip || {}),
             ...(suppliedPlugins.tooltip || {}),
             callbacks: {
+              labelColor: context => ({
+                borderColor: context.dataset.borderColor || context.dataset.backgroundColor,
+                backgroundColor: context.dataset.borderColor || context.dataset.backgroundColor
+              }),
+              labelPointStyle: () => ({ pointStyle: "circle", rotation: 0 }),
               label: context => {
                 const label = context.dataset.label || "Value";
                 return `  ${label}: ${formatValue(context.raw, label)}`;
@@ -547,7 +568,7 @@
         ...dataset,
         ...(isBar
           ? {
-              backgroundColor: dataset.backgroundColor || COLORS[index % COLORS.length],
+              backgroundColor: dataset.backgroundColor || "#4f7c45",
               borderRadius: dataset.borderRadius ?? 6,
               categoryPercentage: dataset.categoryPercentage ?? BAR_CATEGORY_PERCENTAGE,
               barPercentage: dataset.barPercentage ?? BAR_PERCENTAGE,
@@ -556,6 +577,7 @@
           : {
               borderColor: dataset.borderColor || COLORS[index % COLORS.length],
               backgroundColor: dataset.backgroundColor || "transparent",
+              data: dataset.data.map(value => value === 0 ? null : value),
               borderWidth: dataset.borderWidth ?? 2.5,
               pointRadius: dataset.pointRadius ?? 3,
               pointHoverRadius: dataset.pointHoverRadius ?? 6,
@@ -766,7 +788,10 @@
         wrapper.append(legend);
         panel.append(wrapper);
       } else {
-        panel.append(legend, wrapper);
+        const scaleNote = document.createElement("p");
+        scaleNote.className = "scale-control";
+        scaleNote.textContent = "Logarithmic scale: equal spacing means equal ratios; zero values are omitted.";
+        panel.append(legend, scaleNote, wrapper);
       }
       const makeButton = packageDetails(chart, panel);
       card.append(copy, panel);
