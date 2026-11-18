@@ -19,6 +19,8 @@
       --hop-dark: #31552e;
       --hop-light: #dce7d7;
       --border: #dedbd0;
+      --hero-copy-gap: 24px;
+      --section-gap: 28px;
     }
 
     * {
@@ -50,7 +52,7 @@
     }
 
     header {
-      padding: 28px 0 70px;
+      padding: 28px 0 var(--hero-copy-gap);
     }
 
     .eyebrow {
@@ -81,19 +83,19 @@
 
     .hero-copy {
       max-width: 850px;
-      margin: 30px 0 0;
+      margin: var(--hero-copy-gap) 0 0;
       color: var(--muted);
       font-size: clamp(18px, 2.2vw, 22px);
       letter-spacing: -0.02em;
     }
 
     main {
-      padding: 0 0 70px;
+      padding-bottom: var(--section-gap);
     }
 
     .chart-list {
       display: grid;
-      gap: 28px;
+      gap: var(--section-gap);
     }
 
     .chart-card {
@@ -152,12 +154,9 @@
       gap: 8px 16px;
       margin-bottom: 12px;
     }
-    .scale-control {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 10px;
+    .scale-note {
+      margin: 0;
+      text-align: center;
       color: var(--muted);
       font-size: 12px;
     }
@@ -228,7 +227,7 @@
     }
 
     footer {
-      padding: 50px 0;
+      padding: var(--section-gap) 0;
       border-top: 1px solid var(--border);
       color: var(--muted);
       font-size: 12px;
@@ -237,7 +236,7 @@
     .footer-inner {
       display: flex;
       justify-content: space-between;
-      gap: 30px;
+      gap: var(--section-gap);
     }
 
     footer strong {
@@ -271,10 +270,6 @@
     }
 
     @media (max-width: 760px) {
-      header {
-        padding-bottom: 55px;
-      }
-
       .container {
         width: min(100% - 28px, 1120px);
       }
@@ -487,6 +482,11 @@
               intersect: false,
               mode: "index"
             },
+            plugins: {
+              tooltip: {
+                itemSort: (a, b) => b.parsed.y - a.parsed.y
+              }
+            },
             scales: {
               y: {
                 ...commonOptions.scales.y,
@@ -641,21 +641,20 @@
           homepage: shared("homepage")
         };
         const heading = document.createElement("h3");
-        const name = packageName.split("/").pop();
         const homepage = safeHomepage(pkg.homepage);
         if (homepage) {
           const link = document.createElement("a");
           link.href = homepage;
           link.target = "_blank";
           link.rel = "noopener noreferrer";
-          link.textContent = name;
+          link.textContent = packageName;
           const icon = document.createElement("span");
           icon.setAttribute("aria-hidden", "true");
           icon.textContent = " ↗";
           link.append(icon);
           heading.append(link);
         } else {
-          heading.textContent = name;
+          heading.textContent = packageName;
         }
         popup.append(heading);
         if (pkg.description) {
@@ -788,10 +787,7 @@
         wrapper.append(legend);
         panel.append(wrapper);
       } else {
-        const scaleNote = document.createElement("p");
-        scaleNote.className = "scale-control";
-        scaleNote.textContent = "Logarithmic scale: equal spacing means equal ratios; zero values are omitted.";
-        panel.append(legend, scaleNote, wrapper);
+        panel.append(legend, wrapper);
       }
       const makeButton = packageDetails(chart, panel);
       card.append(copy, panel);
@@ -804,6 +800,12 @@
       const fragment = document.createDocumentFragment();
 
       renderedCharts.forEach(({ card }) => fragment.append(card));
+      if (charts.some(chart => chart.config.type === "line")) {
+        const scaleNote = document.createElement("p");
+        scaleNote.className = "scale-note";
+        scaleNote.textContent = "The line charts use a logarithmic scale for install counts.";
+        fragment.append(scaleNote);
+      }
       chartList.replaceChildren(fragment);
 
       renderedCharts.forEach(({ canvas, wrapper, legend, makeButton }, index) => {
