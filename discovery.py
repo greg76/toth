@@ -129,6 +129,24 @@ df_static_site_generators = pd.read_sql_query(
 display(df_static_site_generators)
 
 
+# %% top 10 formulae with git in their description
+
+query = r"""
+SELECT names.name, names.description, names.homepage,
+       SUM(counts.count) AS total_count
+FROM names
+JOIN counts ON counts.name_id = names.name_id
+WHERE names.kind_id = 0
+  AND names.description REGEXP '(?i)\bgit\b'
+GROUP BY names.name_id
+ORDER BY total_count DESC, names.name
+LIMIT 10
+"""
+# Rank by summed snapshots, as in the discovery blocks above.
+df_git_packages = pd.read_sql_query(query, conn)
+display(df_git_packages)
+
+
 # %% published charts
 
 for chart in get_chart_data():
