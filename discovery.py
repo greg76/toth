@@ -8,16 +8,20 @@ from matplotlib.ticker import EngFormatter
 from pandas.core.frame import DataFrame
 
 from charts import (
-    CATEGORY_FILTERS,
+    CLOUD_CLI_ALIASES,
+    CLOUD_CLI_PACKAGES,
     ChartType,
     conn,
     get_chart_data,
     get_descriptions,
 )
+from fetch import DUMPS_DIR, KIND_SPECS, MIN_INSTALLS, parse_num, read_dump
 
 descriptions = get_descriptions()
 
-def top_trend(df: DataFrame, title: str | None = None) -> None:
+def top_trend(
+    df: DataFrame, title: str | None = None, *, y_scale: str = "linear"
+) -> None:
     df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
     latest_date = df["date"].max()
 
@@ -40,6 +44,7 @@ def top_trend(df: DataFrame, title: str | None = None) -> None:
         dashes=False,
     )
     ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1))
+    ax.set_yscale(y_scale)
     ax.yaxis.set_major_formatter(EngFormatter())
     plt.xticks(rotation=90)
     plt.ylabel("Installs")
@@ -130,10 +135,77 @@ df_static_site_generators = pd.read_sql_query(
 display(df_static_site_generators)
 
 
+# %% cloud platform CLIs
+
+# Reviewed CLIs for provisioning public cloud infrastructure or deploying apps
+# to managed runtimes. Shared packages such as gcloud-cli have one series
+# because Homebrew does not report which services their commands are used for.
+# The shared OpenStack client covers Rackspace and other OpenStack clouds.
+# Use paired archives so each date covers both kinds, including below-cutoff
+# events and both sides of Azure's formula-to-cask migration.
+cloud_dumps = {
+    kind.name: {
+        path.name.removesuffix(f"{kind.name}.zst"): path
+        for path in DUMPS_DIR.glob(f"*{kind.name}.zst")
+    }
+    for kind in KIND_SPECS
+}
+cloud_snapshot_dates = sorted(
+    set.intersection(*(set(paths) for paths in cloud_dumps.values()))
+)
+cloud_records = []
+for snapshot_date in cloud_snapshot_dates:
+    for kind in KIND_SPECS:
+        for item in read_dump(cloud_dumps[kind.name][snapshot_date])["items"]:
+            package = item[kind.name]
+            cli_name = CLOUD_CLI_ALIASES.get(package, package)
+            if cli_name in CLOUD_CLI_PACKAGES:
+                cloud_records.append((snapshot_date, cli_name, parse_num(item["count"])))
+
+df_cloud_provider_clis = (
+    pd.DataFrame(cloud_records, columns=["date", "name", "count"])
+    .groupby(["date", "name"], as_index=False)["count"]
+    .sum()
+)
+cloud_metadata = pd.read_sql_query(
+    f"""
+    SELECT name, MAX(description) AS description, MAX(homepage) AS homepage
+    FROM names WHERE name IN ({", ".join("?" for _ in CLOUD_CLI_PACKAGES)})
+    GROUP BY name
+    """,
+    conn,
+    params=tuple(CLOUD_CLI_PACKAGES),
+)
+latest_cloud_date = max(cloud_snapshot_dates, default=None)
+latest_cloud_counts = df_cloud_provider_clis.loc[
+    df_cloud_provider_clis["date"].eq(latest_cloud_date), ["name", "count"]
+]
+latest_cloud_provider_clis = (
+    pd.DataFrame(CLOUD_CLI_PACKAGES.items(), columns=["name", "provider"])
+    .merge(latest_cloud_counts, on="name", how="left")
+    .merge(cloud_metadata, on="name", how="left")
+    .assign(date=latest_cloud_date, count=lambda table: table["count"].astype("Int64"))
+    .sort_values(["count", "name"], ascending=[False, True])
+    [["provider", "name", "description", "homepage", "date", "count"]]
+)
+# A missing table count means the package was absent from the paired snapshot.
+display(latest_cloud_provider_clis.reset_index(drop=True))
+charted_cloud_clis = latest_cloud_provider_clis.loc[
+    latest_cloud_provider_clis["count"].ge(MIN_INSTALLS), "name"
+]
+cloud_trends = df_cloud_provider_clis.loc[
+    df_cloud_provider_clis["name"].isin(charted_cloud_clis)
+].copy()
+if not cloud_trends.empty:
+    top_trend(
+        cloud_trends, "Cloud platform CLIs · 30-day Homebrew installs", y_scale="log"
+    )
+
+
 # %% top 10 diagramming formulae
 
 df_diagramming_formulae = pd.read_sql_query(
-    f"""
+    r"""
     WITH latest_snapshot AS (
         SELECT MAX(date) AS date FROM counts WHERE kind_id = 0
     ),
@@ -142,7 +214,10 @@ df_diagramming_formulae = pd.read_sql_query(
         FROM names
         JOIN counts ON counts.name_id = names.name_id
         JOIN latest_snapshot ON counts.date = latest_snapshot.date
-        WHERE {CATEGORY_FILTERS["Diagrams as code"]}
+        WHERE names.kind_id = 0 AND (
+            names.description REGEXP '(?i)\b(?:diagrams?|diagramming|flowcharts?|uml|graph (?:visuali[sz]ation|layout|rendering))\b'
+            OR names.name IN ('mermaid-cli', 'merman-cli')
+        )
         ORDER BY counts.count DESC, names.name
         LIMIT 10
     )

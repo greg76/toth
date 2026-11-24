@@ -341,6 +341,52 @@ def package_metadata(chart: ChartData) -> dict[str, list[dict]]:
     return result
 
 
+# Curated package names and known aliases for public cloud infrastructure and
+# managed app platforms. A CLI shared across services appears once.
+CLOUD_CLI_PACKAGES = {
+    "awscli": "AWS",
+    "azure-cli": "Microsoft Azure",
+    "gcloud-cli": "Google Cloud",
+    "flyctl": "Fly.io",
+    "doctl": "DigitalOcean",
+    "oci-cli": "Oracle Cloud Infrastructure",
+    "hcloud": "Hetzner Cloud",
+    "aliyun-cli": "Alibaba Cloud",
+    "scw": "Scaleway",
+    "openstackclient": "OpenStack",
+    "ovh/tap/ovhcloud-cli": "OVHcloud",
+    "yandex-cloud-cli": "Yandex Cloud",
+    "tencentcloud/tccli/tccli": "Tencent Cloud",
+    "linode-cli": "Akamai Cloud Computing",
+    "stackitcloud/tap/stackit": "STACKIT",
+    "ibm-cloud-cli": "IBM Cloud",
+    "vultr-cli": "Vultr",
+    "ionos-cloud/ionos-cloud/ionosctl": "IONOS Cloud",
+    "civo/tools/civo": "Civo",
+    "upcloudltd/tap/upcloud-cli": "UpCloud",
+    "exoscale/tap/exoscale-cli": "Exoscale",
+    "karanocave/koocli/koocli": "Huawei Cloud",
+    "cloudflare-wrangler": "Cloudflare Developer Platform",
+    "railway": "Railway",
+    "vercel": "Vercel",
+    "heroku": "Heroku",
+    "render": "Render",
+    "netlify-cli": "Netlify",
+    "aws-elasticbeanstalk": "AWS Elastic Beanstalk",
+    "upsun/tap/upsun-cli": "Upsun",
+    "scalingo": "Scalingo",
+    "koyeb/tap/koyeb": "Koyeb",
+}
+CLOUD_CLI_ALIASES = {
+    "homebrew/cask/azure-cli": "azure-cli",
+    "tencentcloud/tccli/tccli-intl-en": "tencentcloud/tccli/tccli",
+    "vultr/vultr-cli/vultr-cli": "vultr-cli",
+    "exoscale/tap/exo": "exoscale/tap/exoscale-cli",
+    "heroku/brew/heroku": "heroku",
+    "upsun/tap/platformsh-cli": "upsun/tap/upsun-cli",
+}
+
+
 CATEGORY_FILTERS = {
     "Code editors": r"""
         description REGEXP '(?i)(?=.*code)(?=.*edit)'
@@ -413,6 +459,36 @@ def category_query(title: str) -> str:
     # Match metadata once per package, before joining to historical counts.
     return QUERY_TEMPLATE.format(
         f"names.name_id IN (SELECT name_id FROM names WHERE {CATEGORY_FILTERS[title]})"
+    )
+
+
+def _cloud_platform_chart_data() -> DataFrame:
+    packages = {name: name for name in CLOUD_CLI_PACKAGES} | CLOUD_CLI_ALIASES
+    values = ", ".join("(?, ?)" for _ in packages)
+    return pd.read_sql_query(
+        f"""
+        WITH packages(package_name, cli_name) AS (VALUES {values}),
+        merged AS (
+            SELECT counts.date, packages.cli_name AS name, SUM(counts.count) AS count,
+                   GROUP_CONCAT(DISTINCT names.name_id) AS package_ids
+            FROM packages
+            JOIN names ON names.name = packages.package_name
+            JOIN counts ON counts.name_id = names.name_id
+            GROUP BY counts.date, packages.cli_name
+        ),
+        top_names AS (
+            SELECT name FROM merged
+            WHERE date = ({QUERY_LATEST_DATE})
+            ORDER BY count DESC, name
+            LIMIT 10
+        )
+        SELECT date, name, count, package_ids
+        FROM merged
+        WHERE name IN (SELECT name FROM top_names)
+        ORDER BY date, name
+        """,
+        conn,
+        params=[value for pair in packages.items() for value in pair],
     )
 
 
@@ -492,6 +568,20 @@ def get_chart_data() -> list[ChartData]:
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(category_query("Diagrams as code"), conn),
             description="Command-line tools that turn text into flowcharts, sequence diagrams and network graphs.",
+        )
+    )
+
+    # --- cloud platform CLIs ---
+    chart_data.append(
+        ChartData(
+            title="Cloud platform CLIs",
+            chart_type=ChartType.LINE,
+            df=_cloud_platform_chart_data(),
+            description=(
+                "The 10 most-installed Homebrew CLIs for managing public cloud infrastructure "
+                "(IaaS) or deploying apps to managed platforms (PaaS). "
+                "Each CLI's count covers all the services it supports."
+            ),
         )
     )
 
