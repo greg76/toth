@@ -399,7 +399,9 @@ CATEGORY_FILTERS = {
         description REGEXP '(?i)\A(?!.*(?:menu bar|status|pet|memory upgrade)).*\bcod(e|ing)\b\s\b(agent|assistant)\b.*'
         OR description REGEXP '(?i)\A(?!.*(?:review|documentation|language|workout|usage tracker|manage)).*\bAI\b.*(?:programming|code)'
         OR name IN ('antigravity', 'antigravity-cli', 'gemini-cli',
-                    'charmbracelet/tap/crush', 'anomalyco/tap/opencode', 'pi-coding-agent')
+                    'charmbracelet/tap/crush', 'anomalyco/tap/opencode', 'pi-coding-agent',
+                    'qwen-code', 'cursor-cli', 'kiro-cli',
+                    'ampcode/tap/ampcode', 'kilo-org/tap/kilo')
     """,
     "General-purpose Agents & Harnesses": r"""
         (description REGEXP '(?i)^(?!.*(?:operator|cod(e|ing)|IDE|scanner|orchestrator|command|container|manage(r)?)).*\bai (agent|assistant)\b'
