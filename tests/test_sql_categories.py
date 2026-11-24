@@ -26,6 +26,27 @@ class SqlCategoryTests(unittest.TestCase):
             'SELECT name_id FROM names WHERE ' + charts.CATEGORY_FILTERS[title]
         )}
 
+    def test_gainers_merge_versions_per_snapshot_and_keep_kinds_and_taps_separate(self):
+        for name, kind, previous, current in (
+            ('tool', 0, 1000, 1100), ('tool@latest', 0, 500, 1000),
+            ('tool@new', 0, None, 300), ('tool@old', 0, 200, None),
+            ('tool', 1, 500, 1000), ('owner/tap/tool@2', 0, 500, 750),
+            ('new@1', 0, None, 900),
+        ):
+            name_id = self.package(name, None, kind)
+            for date, count in (('20261115', previous), ('20261122', current)):
+                if count is not None:
+                    self.db.execute('INSERT INTO counts VALUES (?, ?, ?, ?)',
+                                    (date, kind, name_id, count))
+        rows = self.db.execute(charts.QUERY_GAINERS).fetchall()
+        growth = {name: pct for name, _, pct in rows}
+        self.assertEqual(growth, {'tool (formula)': 41.18, 'tool (cask)': 100.0,
+                                  'owner/tap/tool': 50.0})
+        ids = next(ids for name, ids, _ in rows if name == 'tool (formula)')
+        names = {self.db.execute('SELECT name FROM names WHERE name_id = ?', (int(i),)).fetchone()[0]
+                 for i in ids.split(',')}
+        self.assertEqual(names, {'tool', 'tool@latest', 'tool@new'})
+
     def test_regex_lookarounds_boundaries_case_and_nulls(self):
         agent = self.package('agent', 'AI Coding Assistant')
         self.package('pet', 'Menu bar coding assistant')

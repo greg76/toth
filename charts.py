@@ -96,21 +96,29 @@ count, CAST(name_id AS TEXT) AS package_ids FROM ranked WHERE rn = 1 AND COALESC
 QUERY_GAINERS = """
 WITH last_two_dates AS (
     SELECT DISTINCT date FROM counts ORDER BY date DESC LIMIT 2),
+merged AS (
+    SELECT counts.date, names.kind_id,
+        substr(names.name, 1, instr(names.name || '@', '@') - 1) AS name,
+        SUM(counts.count) AS count,
+        GROUP_CONCAT(DISTINCT names.name_id) AS package_ids
+    FROM counts JOIN names ON names.name_id = counts.name_id
+    WHERE counts.date IN (SELECT date FROM last_two_dates)
+    GROUP BY counts.date, names.kind_id, substr(names.name, 1, instr(names.name || '@', '@') - 1)
+),
 prev AS (
-    SELECT name_id, count FROM counts WHERE date = (SELECT MIN(date) FROM last_two_dates)
+    SELECT * FROM merged WHERE date = (SELECT MIN(date) FROM last_two_dates)
 ),
 curr AS (
-    SELECT name_id, count FROM counts WHERE date = (SELECT MAX(date) FROM last_two_dates)
+    SELECT * FROM merged WHERE date = (SELECT MAX(date) FROM last_two_dates)
 )
 SELECT
-    names.name || CASE WHEN EXISTS (
-        SELECT 1 FROM names n WHERE n.name = names.name AND n.kind_id <> names.kind_id
-    ) THEN CASE names.kind_id WHEN 0 THEN ' (formula)' ELSE ' (cask)' END ELSE '' END AS name,
-    CAST(names.name_id AS TEXT) AS package_ids, ROUND((curr.count - prev.count) * 100.0 / prev.count, 2) AS pct_growth
+    curr.name || CASE WHEN EXISTS (
+        SELECT 1 FROM merged other WHERE other.name = curr.name AND other.kind_id <> curr.kind_id
+    ) THEN CASE curr.kind_id WHEN 0 THEN ' (formula)' ELSE ' (cask)' END ELSE '' END AS name,
+    curr.package_ids, ROUND((curr.count - prev.count) * 100.0 / prev.count, 2) AS pct_growth
 FROM curr
-JOIN prev  ON prev.name_id = curr.name_id
-JOIN names ON names.name_id = curr.name_id
-WHERE prev.count > 0
+JOIN prev ON prev.kind_id = curr.kind_id AND prev.name = curr.name
+WHERE prev.count > 0 AND (SELECT COUNT(*) FROM last_two_dates) = 2
 ORDER BY pct_growth DESC
 LIMIT 10;
 """
@@ -417,7 +425,7 @@ def get_chart_data() -> list[ChartData]:
             df=pd.read_sql_query(QUERY_GAINERS, conn),
             value_column="pct_growth",
             value_label="Growth percentage (%)",
-            description="Packages with the highest recent week-by-week growth and had at least 500 installs.",
+            description="Packages with the highest growth in rolling 30-day installs between the two latest snapshots. Versions and release channels are combined.",
         )
     )
 
