@@ -366,6 +366,12 @@ CATEGORY_FILTERS = {
         OR description REGEXP '(?i)^(?!.*token).*large language model.*'
         OR name = 'mlx'
     """,
+    "Diagrams as code": r"""
+        names.kind_id = 0 AND (
+            description REGEXP '(?i)\b(?:diagrams?|diagramming|flowcharts?|uml|graph (?:visuali[sz]ation|layout|rendering))\b'
+            OR name IN ('mermaid-cli', 'merman-cli')
+        )
+    """,
     "Local container platforms": r"""
         description REGEXP '(?i)(?=.*container)(?=.*(build|run(ner|times?)?|desktop|gui|manag(e|ing)))'
         OR name = 'orbstack'
@@ -476,6 +482,16 @@ def get_chart_data() -> list[ChartData]:
             chart_type=ChartType.LINE,
             df=pd.read_sql_query(category_query("LLM runners"), conn),
             description="Tools for downloading, running and interacting with large language models locally.",
+        )
+    )
+
+    # --- diagrams as code ---
+    chart_data.append(
+        ChartData(
+            title="Diagrams as code",
+            chart_type=ChartType.LINE,
+            df=pd.read_sql_query(category_query("Diagrams as code"), conn),
+            description="Command-line tools that turn text into flowcharts, sequence diagrams and network graphs.",
         )
     )
 

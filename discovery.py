@@ -8,6 +8,7 @@ from matplotlib.ticker import EngFormatter
 from pandas.core.frame import DataFrame
 
 from charts import (
+    CATEGORY_FILTERS,
     ChartType,
     conn,
     get_chart_data,
@@ -127,6 +128,40 @@ df_static_site_generators = pd.read_sql_query(
     query, conn, params=(static_site_pattern,)
 )
 display(df_static_site_generators)
+
+
+# %% top 10 diagramming formulae
+
+df_diagramming_formulae = pd.read_sql_query(
+    f"""
+    WITH latest_snapshot AS (
+        SELECT MAX(date) AS date FROM counts WHERE kind_id = 0
+    ),
+    top_formulae AS (
+        SELECT names.name_id, names.name, names.description, names.homepage
+        FROM names
+        JOIN counts ON counts.name_id = names.name_id
+        JOIN latest_snapshot ON counts.date = latest_snapshot.date
+        WHERE {CATEGORY_FILTERS["Diagrams as code"]}
+        ORDER BY counts.count DESC, names.name
+        LIMIT 10
+    )
+    SELECT counts.date, top_formulae.name, counts.count,
+           top_formulae.description, top_formulae.homepage
+    FROM counts
+    JOIN top_formulae ON counts.name_id = top_formulae.name_id
+    ORDER BY counts.date, counts.count DESC, top_formulae.name
+    """,
+    conn,
+)
+# Rank the table by the latest rolling 30-day snapshot and plot all stored snapshots.
+latest_diagramming = df_diagramming_formulae.loc[
+    df_diagramming_formulae["date"] == df_diagramming_formulae["date"].max(),
+    ["name", "description", "homepage", "date", "count"],
+]
+display(latest_diagramming.reset_index(drop=True))
+if not df_diagramming_formulae.empty:
+    top_trend(df_diagramming_formulae, "Diagramming formulae · 30-day installs on request")
 
 
 # %% top 10 formulae with git in their description
