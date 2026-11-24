@@ -1,0 +1,317 @@
+[
+  {
+    "package": "codex",
+    "client_language": "Rust",
+    "agent_runtime_language": null,
+    "client_platform": null,
+    "evidence_type": "source",
+    "notes": null,
+    "source_urls": [
+      "https://github.com/openai/codex/tree/main/codex-rs"
+    ]
+  },
+  {
+    "package": "claude-code",
+    "client_language": "TypeScript",
+    "agent_runtime_language": null,
+    "client_platform": "Bun",
+    "evidence_type": "vendor",
+    "notes": "Bundled with Bun.",
+    "source_urls": [
+      "https://builders.simpfly.info/episodes/mike-krieger/transcript",
+      "https://bun.com/"
+    ]
+  },
+  {
+    "package": "opencode",
+    "client_language": "TypeScript",
+    "agent_runtime_language": null,
+    "client_platform": null,
+    "evidence_type": "source",
+    "notes": null,
+    "source_urls": [
+      "https://github.com/anomalyco/opencode/tree/dev/packages/opencode"
+    ]
+  },
+  {
+    "package": "gemini-cli",
+    "client_language": "TypeScript",
+    "agent_runtime_language": null,
+    "client_platform": null,
+    "evidence_type": "source",
+    "notes": null,
+    "source_urls": [
+      "https://github.com/google-gemini/gemini-cli/tree/main/packages/cli"
+    ]
+  },
+  {
+    "package": "copilot-cli",
+    "client_language": "TypeScript",
+    "agent_runtime_language": "Rust",
+    "client_platform": null,
+    "evidence_type": "vendor",
+    "notes": "TypeScript terminal UI and Rust agent runtime.",
+    "source_urls": [
+      "https://github.blog/ai-and-ml/generative-ai/migrating-the-github-copilot-runtime-to-rust-using-copilot/",
+      "https://github.blog/changelog/2026-08-28-github-copilot-weekly-releases-august-24/"
+    ]
+  },
+  {
+    "package": "anomalyco/tap/opencode",
+    "client_language": "TypeScript",
+    "agent_runtime_language": null,
+    "client_platform": null,
+    "evidence_type": "source",
+    "notes": "Vendor tap for the same OpenCode CLI.",
+    "source_urls": [
+      "https://github.com/anomalyco/opencode/tree/dev/packages/opencode"
+    ]
+  },
+  {
+    "package": "antigravity-cli",
+    "client_language": "Go",
+    "agent_runtime_language": null,
+    "client_platform": null,
+    "evidence_type": "vendor",
+    "notes": "Google confirms Go for the CLI. The language of the shared server-side harness is unverified.",
+    "source_urls": [
+      "https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/",
+      "https://antigravity.google/blog/introducing-google-antigravity-cli"
+    ]
+  },
+  {
+    "package": "opencode-desktop",
+    "client_language": "TypeScript",
+    "agent_runtime_language": null,
+    "client_platform": "Electron",
+    "evidence_type": "source",
+    "notes": null,
+    "source_urls": [
+      "https://github.com/anomalyco/opencode/tree/dev/packages/desktop"
+    ]
+  },
+  {
+    "package": "antigravity",
+    "client_language": null,
+    "agent_runtime_language": null,
+    "client_platform": "Electron",
+    "evidence_type": "unverified",
+    "notes": "Vendor documentation identifies Electron in the desktop app and a shared agent harness with the CLI. The implementation languages are unverified.",
+    "source_urls": [
+      "https://antigravity.google/docs/changelog",
+      "https://antigravity.google/blog/introducing-google-antigravity-cli"
+    ]
+  },
+  {
+    "package": "t3-code",
+    "client_language": "TypeScript",
+    "agent_runtime_language": null,
+    "client_platform": "Electron",
+    "evidence_type": "source",
+    "notes": null,
+    "source_urls": [
+      "https://github.com/pingdotgg/t3code/tree/main/apps/desktop"
+    ]
+  },
+  {
+    "package": "pi-coding-agent",
+    "client_language": "TypeScript",
+    "agent_runtime_language": null,
+    "client_platform": null,
+    "evidence_type": "source",
+    "notes": null,
+    "source_urls": [
+      "https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/main.ts"
+    ]
+  },
+  {
+    "package": "qwen-code",
+    "client_language": "TypeScript",
+    "agent_runtime_language": null,
+    "client_platform": null,
+    "evidence_type": "source",
+    "notes": null,
+    "source_urls": [
+      "https://github.com/QwenLM/qwen-code/tree/main/packages/cli"
+    ]
+  },
+  {
+    "package": "block-goose-cli",
+    "client_language": "Rust",
+    "agent_runtime_language": "Rust",
+    "client_platform": null,
+    "evidence_type": "source",
+    "notes": null,
+    "source_urls": [
+      "https://github.com/aaif-goose/goose/discussions/7697"
+    ]
+  },
+  {
+    "package": "cursor-cli",
+    "client_language": "TypeScript",
+    "agent_runtime_language": null,
+    "client_platform": "Node.js",
+    "evidence_type": "artifact",
+    "notes": "The macOS package contains bundled JavaScript with Cursor-specific TypeScript source paths.",
+    "source_urls": [
+      "https://formulae.brew.sh/cask/cursor-cli"
+    ]
+  },
+  {
+    "package": "kimi-code",
+    "client_language": "TypeScript",
+    "agent_runtime_language": null,
+    "client_platform": null,
+    "evidence_type": "source",
+    "notes": "The predecessor package, kimi-cli, was written in Python.",
+    "source_urls": [
+      "https://github.com/MoonshotAI/kimi-code",
+      "https://github.com/MoonshotAI/kimi-cli/blob/main/AGENTS.md"
+    ]
+  },
+  {
+    "package": "kiro-cli",
+    "client_language": "JavaScript family",
+    "agent_runtime_language": null,
+    "client_platform": "Bun",
+    "evidence_type": "partial",
+    "notes": "Bun powers the frontend. The exact source language and the language of the shared V3 harness are unverified.",
+    "source_urls": [
+      "https://kiro.dev/blog/agents-run-for-days/",
+      "https://kiro.dev/docs/cli/v3/"
+    ]
+  },
+  {
+    "package": "charmbracelet/tap/crush",
+    "client_language": "Go",
+    "agent_runtime_language": null,
+    "client_platform": null,
+    "evidence_type": "source",
+    "notes": null,
+    "source_urls": [
+      "https://github.com/charmbracelet/crush/blob/main/go.mod"
+    ]
+  },
+  {
+    "package": "grok-build",
+    "client_language": "Rust",
+    "agent_runtime_language": "Rust",
+    "client_platform": null,
+    "evidence_type": "source",
+    "notes": null,
+    "source_urls": [
+      "https://github.com/xai-org/grok-build"
+    ]
+  },
+  {
+    "package": "antigravity-ide",
+    "client_language": null,
+    "agent_runtime_language": null,
+    "client_platform": null,
+    "evidence_type": "unverified",
+    "notes": "Google confirms use of the shared Antigravity harness. The implementation languages are unverified.",
+    "source_urls": [
+      "https://codelabs.developers.google.com/agentic-ui-automation-with-antigravity"
+    ]
+  },
+  {
+    "package": "ampcode/tap/ampcode",
+    "client_language": "JavaScript family",
+    "agent_runtime_language": null,
+    "client_platform": "Bun",
+    "evidence_type": "partial",
+    "notes": "Amp confirms the CLI was distributed as JavaScript and is now compiled with Bun. The original source language is unverified.",
+    "source_urls": [
+      "https://ampcode.com/news/npm-package-changes"
+    ]
+  },
+  {
+    "package": "block-goose",
+    "client_language": "TypeScript",
+    "agent_runtime_language": "Rust",
+    "client_platform": "Electron",
+    "evidence_type": "source",
+    "notes": "TypeScript desktop UI and Rust agent runtime.",
+    "source_urls": [
+      "https://github.com/aaif-goose/goose/blob/main/.goosehints"
+    ]
+  },
+  {
+    "package": "mistral-vibe",
+    "client_language": "Python",
+    "agent_runtime_language": null,
+    "client_platform": null,
+    "evidence_type": "source",
+    "notes": null,
+    "source_urls": [
+      "https://github.com/mistralai/mistral-vibe/blob/main/pyproject.toml"
+    ]
+  },
+  {
+    "package": "devin-cli",
+    "client_language": "Rust",
+    "agent_runtime_language": null,
+    "client_platform": null,
+    "evidence_type": "artifact",
+    "notes": "Cognition confirms a Rust terminal renderer. The macOS binary also contains a Rust CLI entry-point path.",
+    "source_urls": [
+      "https://cognition.com/blog/devin-for-terminal",
+      "https://formulae.brew.sh/cask/devin-cli"
+    ]
+  },
+  {
+    "package": "kilo-org/tap/kilo",
+    "client_language": "TypeScript",
+    "agent_runtime_language": null,
+    "client_platform": null,
+    "evidence_type": "source",
+    "notes": null,
+    "source_urls": [
+      "https://github.com/Kilo-Org/kilocode/blob/main/packages/opencode/AGENTS.md"
+    ]
+  },
+  {
+    "package": "muse-code",
+    "client_language": "Rust",
+    "agent_runtime_language": "Rust",
+    "client_platform": null,
+    "evidence_type": "artifact",
+    "notes": "The macOS binary contains Rust source paths for the CLI, agent components, and session server.",
+    "source_urls": [
+      "https://formulae.brew.sh/cask/muse-code"
+    ]
+  },
+  {
+    "package": "zot",
+    "client_language": "Go",
+    "agent_runtime_language": null,
+    "client_platform": null,
+    "evidence_type": "source",
+    "notes": null,
+    "source_urls": [
+      "https://github.com/patriceckhart/zot"
+    ]
+  },
+  {
+    "package": "aider",
+    "client_language": "Python",
+    "agent_runtime_language": null,
+    "client_platform": null,
+    "evidence_type": "source",
+    "notes": null,
+    "source_urls": [
+      "https://github.com/Aider-AI/aider/blob/main/pyproject.toml"
+    ]
+  },
+  {
+    "package": "letta-code",
+    "client_language": "TypeScript",
+    "agent_runtime_language": null,
+    "client_platform": null,
+    "evidence_type": "source",
+    "notes": null,
+    "source_urls": [
+      "https://github.com/letta-ai/letta-code/blob/main/package.json"
+    ]
+  }
+]
